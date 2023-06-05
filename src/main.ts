@@ -68,6 +68,32 @@ class Table {
     this.#tableName = tableName;
   }
 
+  /**
+   * Get next ID
+   * 
+   * @param tableName table name
+   * @returns last row key plus `1n`
+   * 
+   * note: assumes row keys are of type `bigint`!
+   * beware: throws if last row key is not of type `bigint`!
+   */
+  async #nextId(tableName: string): Promise<bigint> {
+    const lastEntry = this.#db.list<bigint>({ prefix: [tableName] }, { limit: 1, reverse: true });
+    const { done, value } = await lastEntry.next();
+
+    if (done && !value) {
+      return 1n;
+    } else if (!done && value) {
+      const id = value.key.at(1) as bigint;
+      if (typeof id != "bigint") {
+        throw new Error(`expected last id '${id}' of type 'bigint' instead of '${typeof id}'`);
+      }
+      return id + 1n;
+    } else {
+      throw new Error("unreachable");
+    }
+  }
+
   // todo: type obj
   /**
    * Add row to table
@@ -76,7 +102,7 @@ class Table {
    */
   async insert(obj: unknown) {
     // todo: fix
-    const id = 1n;
+    const id = await this.#nextId(this.#tableName);
     for (const [columnName, value] of Object.entries(obj)) {
       // todo: validate columnName is valid key
       const key = [this.#tableName, id, columnName];
