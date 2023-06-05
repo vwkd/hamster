@@ -90,5 +90,9 @@ const schema: Schema = {
 
 const db = await createDatabase(schema, "./tests/main.db");
 
-await db.from("countries").add({ name: "USA", color: "blue" });
+await db.from("countries").insert({ name: "USA", color: "blue" });
 const country1 = await db.from("countries").getById(1n);
+
+await db.from("countries").deleteById(1n);
+
+await db.from("countries").updateById(1n, { name: "USA" });

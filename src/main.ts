@@ -74,7 +74,7 @@ class Table {
    * 
    * Automatically generates autoincrementing ID
    */
-  async add(obj: unknown) {
+  async insert(obj: unknown) {
     // todo: fix
     const id = 1n;
     for (const [columnName, value] of Object.entries(obj)) {
@@ -101,5 +101,27 @@ class Table {
     const res = arr2obj(arr, "key", "value");
 
     return res;
+  }
+
+  /**
+   * Delete row from table by id
+   */
+  async deleteById(id: bigint) {
+    const key = [this.#tableName, id];
+
+    return this.#db.delete(key);
+  }
+
+  // todo: type obj
+  /**
+   * Update row in table
+   */
+  async updateById(id: bigint, obj: unknown) {
+    // todo: check if row exists and throw otherwise
+    for (const [columnName, value] of Object.entries(obj)) {
+      // todo: validate columnName is valid key
+      const key = [this.#tableName, id, columnName];
+      await this.#db.set(key, value);
+    }
   }
 }
