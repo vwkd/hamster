@@ -13,9 +13,8 @@ export interface ColumnSchema {
 }
 
 // todo: type Row argument as Row of Table
-
-// todo: use atomic transactions, also don't return `void` for set
 // todo: expose concurrency options to Deno KV methods
+// beware: doesn't validate output, assumes database is always valid!
 export class Table<TableName extends string> {
   #db: Deno.Kv;
   #tableName: TableName;
@@ -79,7 +78,7 @@ export class Table<TableName extends string> {
     return id;
   }
 
-  // todo: only select certain columns if optional argument `columns?` provided
+  // todo: add option to select only some columns with optional argument `columns?`
   /**
    * Get row from table by id
    * 

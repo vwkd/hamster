@@ -1,16 +1,20 @@
 # README
 
-A high-level wrapper for the Deno KV database
+A relational wrapper for the Deno KV database
 
 
 
 ## Features
 
-- given high-level schema creates underlying database
-- efficient API
-- supports relations one-to-one, many-to-one and many-to-many
-- auto-incrementing IDs
-- ...
+- simple API to insert, read, update and delete
+- manages database under the hood, e.g. auto-incrementing IDs, etc.
+- strictly typed, validates inputs to schema
 
-- validates all input to comply with schema
-- beware: doesn't validate output, assumes database is always valid
+
+
+## TODO
+
+- support one-to-one, many-to-one and many-to-many relationships, automatically joins when reads
+- migrations to change schema
+- use proper TypeScript types, make type inference work
+- use atomic transactions to avoid race conditions on Deno Deploy
