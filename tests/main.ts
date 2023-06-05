@@ -23,15 +23,15 @@ const db = await openDatabase(schema, "./tests/main.db");
 
 const id = await db.from("countries").insert({ name: "USA", color: "blue" });
 
-const a = await db.from("countries").getById(id);
+const a = await db.from("countries").where({ eq: { id }}).get();
 console.log(id, a);
 
-await db.from("countries").deleteById(id);
+await db.from("countries").where({ eq: { id }}).update({ name: "USB" });
 
-const b = await db.from("countries").getById(id);
+const b = await db.from("countries").where({ eq: { id }}).get();
 console.log(id, b);
 
-await db.from("countries").updateById(id, { name: "USB" });
+await db.from("countries").where({ eq: { id }}).delete();
 
-const c = await db.from("countries").getById(id);
+const c = await db.from("countries").where({ eq: { id }}).get();
 console.log(id, c);

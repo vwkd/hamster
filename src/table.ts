@@ -1,5 +1,6 @@
 import { z } from "../deps.ts";
 import type { ZodObject, ZodType } from "../deps.ts";
+import { Row } from "./row.ts";
 import { buildZodSchema } from "./utils.ts";
 
 export interface TableSchema {
@@ -12,14 +13,22 @@ export interface ColumnSchema {
   type: ZodType;
 }
 
-// todo: type Row argument as Row of Table
+/**
+ * Condition of row
+ * 
+ * Currently only by id
+ */
+export interface RowCondition {
+  eq: { id: bigint }
+}
+
 // todo: expose concurrency options to Deno KV methods
 // beware: doesn't validate output, assumes database is always valid!
 export class Table<TableName extends string> {
   #db: Deno.Kv;
   #tableName: TableName;
   #idSchema = z.bigint();
-  // todo: infer type from tableSchema such that it doesn't lose type information
+  // todo: infer type from tableSchema such that it doesn't lose type information, also in `row.ts`
   #tableSchema: ZodObject<{ [k in string]: ZodType }>;
 
   /**
@@ -72,6 +81,7 @@ export class Table<TableName extends string> {
    * @param rowArg data to insert into row
    * @returns id of new row
    */
+  // todo: type rowArg, also downstream in `row.ts`
   async insert(rowArg: unknown): Promise<bigint> {
     const row = this.#tableSchema.parse(rowArg);
 
@@ -86,77 +96,13 @@ export class Table<TableName extends string> {
   }
 
   /**
-   * Get row from table by id
-   *
-   * @param idArg id of row
-   * @returns data of row if row exists, `undefined` if row doesn't exist
+   * Get interface to row by condition
+   * @param condition condition of row
+   * @returns an instance of `Row`
    */
-  // todo: add optional columns argument to only get some columns instead of all
-  async getById(idArg: unknown): Promise<z.infer<typeof tmp> | undefined> {
-    const id = this.#idSchema.parse(idArg);
+  where(condition: RowCondition) {
+    const id = this.#idSchema.parse(condition?.eq?.id);
 
-    const tmp = this.#tableSchema;
-
-    const key = [this.#tableName, id];
-
-    // todo: type entries and obj
-    const entries = this.#db.list({ prefix: key });
-
-    const obj: z.infer<typeof tmp> = {};
-
-    for await (const entry of entries) {
-      const key = entry.key.at(-1)!;
-      const value = entry.value;
-      obj[key] = value;
-    }
-
-    // no columns, row doesn't exist
-    if (!Object.entries(obj).length) {
-      return undefined;
-    }
-
-    return obj;
-  }
-
-  /**
-   * Delete row from table by id
-   * 
-   * @param idArg id of row
-   */
-  async deleteById(idArg: unknown): Promise<void> {
-    const id = this.#idSchema.parse(idArg);
-
-    const key = [this.#tableName, id];
-
-    const entries = this.#db.list({ prefix: key });
-
-    for await (const entry of entries) {
-      this.#db.delete(entry.key);
-    }
-  }
-
-  /**
-   * Update row in table by id
-   * 
-   * @param idArg id of row
-   * @param rowArg data to update row with
-   */
-  // todo: allow partial data to update only some columns instead of all
-  async updateById(idArg: unknown, rowArg: unknown): Promise<void> {
-    const id = this.#idSchema.parse(idArg);
-    const row = this.#tableSchema.parse(rowArg);
-
-    const rowOld = await this.getById(id);
-
-    if (!rowOld) {
-      throw new Error(
-        `A row with id '${id}' doesn't exist in table '${this.#tableName}'.`,
-      );
-    }
-
-    for (const [columnName, value] of Object.entries(row)) {
-      const key = [this.#tableName, id, columnName];
-      await this.#db.set(key, value);
-    }
+    return new Row(this.#db, this.#tableName, this.#tableSchema, id);
   }
 }
