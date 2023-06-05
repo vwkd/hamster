@@ -6,32 +6,28 @@ export interface Schema {
 
 export interface Table {
   name: string;
-  columns: Column[];
+  columns: (IdColumn & CustomColumn)[];
 }
 
-type Column = Column1 | Column2 | Column3;
+export interface IdColumn {
+  name: "id",
+  type: "bigint";
+}
 
-export interface ColumnBase {
+// todo: add more custom columns
+export type CustomColumn = Column2 | Column3;
+
+export interface CustomColumnBase {
   name: string;
 }
 
-export interface Column1 extends ColumnBase {
-  type: "bigint";
-  primary_key?: boolean;
-  autoincrement?: boolean;
-}
-
-export interface Column2 extends ColumnBase {
+export interface Column2 extends CustomColumnBase {
   type: "string";
-  primary_key?: boolean;
 }
 
-export interface Column3 extends ColumnBase {
+export interface Column3 extends CustomColumnBase {
   type: "number";
-  primary_key?: boolean;
 }
-
-// ... more columns
 
 export async function createDatabase(schema: Schema, path?: string) {
   const db = await Deno.openKv(path);
