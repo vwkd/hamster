@@ -1,4 +1,4 @@
-import type { ZodObject, ZodType, z } from "../deps.ts";
+import type { z, ZodObject, ZodType } from "../deps.ts";
 import type { TableSchema } from "./table.ts";
 
 export class Row<TableName extends string> {
@@ -13,7 +13,12 @@ export class Row<TableName extends string> {
    * @param tableName the table name
    * @param tableSchema the table schema
    */
-  constructor(db: Deno.Kv, tableName: TableName, tableSchema: TableSchema, id: bigint) {
+  constructor(
+    db: Deno.Kv,
+    tableName: TableName,
+    tableSchema: TableSchema,
+    id: bigint,
+  ) {
     this.#db = db;
     this.#tableName = tableName;
     this.#tableSchema = tableSchema;
@@ -65,7 +70,7 @@ export class Row<TableName extends string> {
 
   /**
    * Update row in table
-   * 
+   *
    * @param rowArg data to update row with
    */
   // todo: allow partial data to update only some columns instead of all

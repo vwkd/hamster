@@ -15,11 +15,11 @@ export interface ColumnSchema {
 
 /**
  * Condition of row
- * 
+ *
  * Currently only by id
  */
 export interface RowCondition {
-  eq: { id: bigint }
+  eq: { id: bigint };
 }
 
 // todo: expose concurrency options to Deno KV methods

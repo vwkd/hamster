@@ -21,17 +21,34 @@ const schema = {
 
 const db = await openDatabase(schema, "./tests/main.db");
 
-const id = await db.from("countries").insert({ name: "USA", color: "blue" });
+const id = await db
+  .from("countries")
+  .insert({ name: "USA", color: "blue" });
 
-const a = await db.from("countries").where({ eq: { id }}).get();
+const a = await db
+  .from("countries")
+  .where({ eq: { id } })
+  .get();
 console.log(id, a);
 
-await db.from("countries").where({ eq: { id }}).update({ name: "USB" });
+await db
+  .from("countries")
+  .where({ eq: { id } })
+  .update({ name: "USB" });
 
-const b = await db.from("countries").where({ eq: { id }}).get();
+const b = await db
+  .from("countries")
+  .where({ eq: { id } })
+  .get();
 console.log(id, b);
 
-await db.from("countries").where({ eq: { id }}).delete();
+await db
+  .from("countries")
+  .where({ eq: { id } })
+  .delete();
 
-const c = await db.from("countries").where({ eq: { id }}).get();
+const c = await db
+  .from("countries")
+  .where({ eq: { id } })
+  .get();
 console.log(id, c);
