@@ -50,9 +50,8 @@ class Database {
 
   // todo: type tableName, also downstream
   from(tableName: string) {
-    return new Table(this.#db, this.#schema, tableName)
+    return new Table(this.#db, this.#schema, tableName);
   }
-
 }
 
 // todo: use atomic transactions
@@ -70,15 +69,18 @@ class Table {
 
   /**
    * Get next ID
-   * 
+   *
    * @param tableName table name
    * @returns last row key plus `1n`
-   * 
+   *
    * note: assumes row keys are of type `bigint`!
    * beware: throws if last row key is not of type `bigint`!
    */
   async #nextId(tableName: string): Promise<bigint> {
-    const lastEntry = this.#db.list<bigint>({ prefix: [tableName] }, { limit: 1, reverse: true });
+    const lastEntry = this.#db.list<bigint>({ prefix: [tableName] }, {
+      limit: 1,
+      reverse: true,
+    });
     const { done, value } = await lastEntry.next();
 
     if (done && !value) {
@@ -86,7 +88,9 @@ class Table {
     } else if (!done && value) {
       const id = value.key.at(1) as bigint;
       if (typeof id != "bigint") {
-        throw new Error(`expected last id '${id}' of type 'bigint' instead of '${typeof id}'`);
+        throw new Error(
+          `expected last id '${id}' of type 'bigint' instead of '${typeof id}'`,
+        );
       }
       return id + 1n;
     } else {
@@ -97,7 +101,7 @@ class Table {
   // todo: type obj
   /**
    * Add row to table
-   * 
+   *
    * Automatically generates autoincrementing ID
    */
   async insert(obj: unknown) {
@@ -115,7 +119,7 @@ class Table {
   // todo: only select columns if optional argument `columns?` provided
   /**
    * Get row from table by id
-   * 
+   *
    * Accepts optional columns to only get those
    */
   async getById(id: bigint) {
@@ -123,7 +127,9 @@ class Table {
     const entries = this.#db.list({ prefix: key });
 
     const arr = await gen2arr(entries);
-    arr.forEach((el) => { el.key = el.key.at(-1) });
+    arr.forEach((el) => {
+      el.key = el.key.at(-1);
+    });
     const res = arr2obj(arr, "key", "value");
 
     return res;
