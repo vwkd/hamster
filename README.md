@@ -1,14 +1,14 @@
 # README
 
-A relational wrapper for the Deno KV database
+A relational API for Deno KV
 
 
 
 ## Features
 
-- simple API to insert, read, update and delete
-- manages database under the hood, e.g. auto-incrementing IDs, etc.
-- strictly typed, validates inputs to schema
+- insert, read, update and delete rows of tables
+- automatic auto-incrementing IDs
+- structured, validates input against schema (not output)
 
 
 
@@ -58,7 +58,7 @@ console.log(id, c);
 
 ## TODO
 
-- support one-to-one, many-to-one and many-to-many relationships, automatically joins when reads
-- migrations to change schema
+- support one-to-one, many-to-one and many-to-many relationships, automatically join relationships on read
 - use proper TypeScript types, make type inference work
 - use atomic transactions to avoid race conditions on Deno Deploy, also handle unsuccessful `set`s, etc.
+- migrations to change schema
