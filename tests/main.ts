@@ -1,5 +1,5 @@
 import { createDatabase } from "../src/main.ts";
-import type { Schema } from "../src/main.ts";
+import type { Schema } from "../src/types.ts";
 
 const schema: Schema = {
   tables: [
