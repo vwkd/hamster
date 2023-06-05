@@ -1,6 +1,6 @@
 import { z } from "../deps.ts";
-import type { ZodType, ZodObject } from "../deps.ts";
-import { buildZodSchema} from "./utils.ts";
+import type { ZodObject, ZodType } from "../deps.ts";
+import { buildZodSchema } from "./utils.ts";
 
 export interface TableSchema {
   name: string;
@@ -81,7 +81,7 @@ export class Table<TableName extends string> {
   // todo: add option to select only some columns with optional argument `columns?`
   /**
    * Get row from table by id
-   * 
+   *
    * Returns undefined if row doesn't exist
    *
    * Accepts optional columns to only get those
@@ -120,7 +120,7 @@ export class Table<TableName extends string> {
 
     const key = [this.#tableName, id];
 
-    const entries = this.#db.list({prefix: key});
+    const entries = this.#db.list({ prefix: key });
 
     for await (const entry of entries) {
       this.#db.delete(entry.key);
@@ -135,9 +135,11 @@ export class Table<TableName extends string> {
     const row = this.#tableSchema.parse(rowArg);
 
     const rowOld = await this.getById(id);
-    
+
     if (!rowOld) {
-      throw new Error(`A row with id '${id}' doesn't exist in table '${this.#tableName}'.`);
+      throw new Error(
+        `A row with id '${id}' doesn't exist in table '${this.#tableName}'.`,
+      );
     }
 
     for (const [columnName, value] of Object.entries(row)) {

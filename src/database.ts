@@ -21,7 +21,9 @@ export class Database {
   from<TableName extends string>(tableNameArg: TableName) {
     const tableName = this.#tableNameSchema.parse(tableNameArg) as TableName;
 
-    const tableSchema = this.#schema.tables.find(table => table.name == tableName);
+    const tableSchema = this.#schema.tables.find((table) =>
+      table.name == tableName
+    );
 
     if (!tableSchema) {
       throw new Error(`A table with name '${tableName}' doesn't exist.`);

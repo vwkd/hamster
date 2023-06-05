@@ -14,9 +14,9 @@ const schema = {
           name: "color",
           type: z.string().optional(),
         },
-      ]
-    }
-  ]
+      ],
+    },
+  ],
 };
 
 const db = await createDatabase(schema, "./tests/main.db");
