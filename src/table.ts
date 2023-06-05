@@ -1,7 +1,18 @@
 import { z } from "../deps.ts";
 import type { ZodType, ZodObject } from "../deps.ts";
+import { buildZodSchema} from "./utils.ts";
 
-export type TableSchema = { [k in string]: ZodType };
+export interface TableSchema {
+  name: string;
+  columns: ColumnSchema[];
+}
+
+export interface ColumnSchema {
+  name: string;
+  type: ZodType;
+}
+
+// todo: type Row argument as Row of Table
 
 // todo: use atomic transactions, also don't return `void` for set
 // todo: expose concurrency options to Deno KV methods
@@ -9,13 +20,14 @@ export class Table<TableName extends string> {
   #db: Deno.Kv;
   #tableName: TableName;
   #idSchema = z.bigint();
-  #tableSchema: ZodObject<TableSchema>;
+  // todo: infer type from tableSchema such that it doesn't lose type information
+  #tableSchema: ZodObject<{ [k in string]: ZodType }>;
 
   // todo: is `ZodType` too general?
   constructor(db: Deno.Kv, tableName: TableName, tableSchema: TableSchema) {
     this.#db = db;
     this.#tableName = tableName;
-    this.#tableSchema = z.object(tableSchema);
+    this.#tableSchema = z.object(buildZodSchema(tableSchema));
   }
 
   /**

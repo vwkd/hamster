@@ -2,10 +2,21 @@ import { z } from "../deps.ts";
 import { createDatabase } from "../src/main.ts";
 
 const schema = {
-  "countries": {
-    "name": z.string(),
-    "color": z.string().optional(),
-  }
+  tables: [
+    {
+      name: "countries",
+      columns: [
+        {
+          name: "name",
+          type: z.string(),
+        },
+        {
+          name: "color",
+          type: z.string().optional(),
+        },
+      ]
+    }
+  ]
 };
 
 const db = await createDatabase(schema, "./tests/main.db");
