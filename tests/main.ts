@@ -89,3 +89,7 @@ const schema: Schema = {
 };
 
 const db = await Database(schema, "./tests/main.db");
+
+await db.add("countries", { name: "USA" });
+const country1 = await db.getById("countries", 1n);
+
