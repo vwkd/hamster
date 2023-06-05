@@ -11,11 +11,21 @@ export class Database {
   #schema: DatabaseSchema;
   #tableNameSchema = z.string();
 
+  /**
+   * A relational wrapper for the Deno KV database
+   * @param db the Deno.KV database
+   * @param schema the database schema
+   */
   constructor(db: Deno.Kv, schema: DatabaseSchema) {
     this.#db = db;
     this.#schema = schema;
   }
 
+  /**
+   * Get interface to table
+   * @param tableNameArg the table name
+   * @returns an instance of `Table`
+   */
   // todo: does string literal propagate? maybe try
   // type StringLiteral<T> = T extends string ? string extends T ? never : T : never;
   from<TableName extends string>(tableNameArg: TableName) {

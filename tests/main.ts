@@ -1,5 +1,5 @@
 import { z } from "../deps.ts";
-import { createDatabase } from "../src/main.ts";
+import { openDatabase } from "../src/main.ts";
 
 const schema = {
   tables: [
@@ -19,7 +19,7 @@ const schema = {
   ],
 };
 
-const db = await createDatabase(schema, "./tests/main.db");
+const db = await openDatabase(schema, "./tests/main.db");
 
 const id = await db.from("countries").insert({ name: "USA", color: "blue" });
 

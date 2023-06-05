@@ -22,6 +22,12 @@ export class Table<TableName extends string> {
   // todo: infer type from tableSchema such that it doesn't lose type information
   #tableSchema: ZodObject<{ [k in string]: ZodType }>;
 
+  /**
+   * An interface for a table
+   * @param db the Deno KV database
+   * @param tableName the table name
+   * @param tableSchema the table schema
+   */
   // todo: is `ZodType` too general?
   constructor(db: Deno.Kv, tableName: TableName, tableSchema: TableSchema) {
     this.#db = db;
@@ -30,7 +36,7 @@ export class Table<TableName extends string> {
   }
 
   /**
-   * Get next ID
+   * Generate autoincrementing ID for new row of table
    *
    * @param tableName table name
    * @returns last row key plus `1n`
@@ -38,7 +44,7 @@ export class Table<TableName extends string> {
    * note: assumes row keys are of type `bigint`!
    * beware: throws if last row key is not of type `bigint`!
    */
-  async #nextId(tableName: TableName): Promise<bigint> {
+  async #generateRowId(tableName: TableName): Promise<bigint> {
     const lastEntry = this.#db.list<bigint>({ prefix: [tableName] }, {
       limit: 1,
       reverse: true,
@@ -63,12 +69,13 @@ export class Table<TableName extends string> {
   /**
    * Add row to table
    *
-   * Automatically generates autoincrementing ID
+   * @param rowArg data to insert into row
+   * @returns id of new row
    */
   async insert(rowArg: unknown): Promise<bigint> {
     const row = this.#tableSchema.parse(rowArg);
 
-    const id = await this.#nextId(this.#tableName);
+    const id = await this.#generateRowId(this.#tableName);
 
     for (const [columnName, value] of Object.entries(row)) {
       const key = [this.#tableName, id, columnName];
@@ -78,14 +85,13 @@ export class Table<TableName extends string> {
     return id;
   }
 
-  // todo: add option to select only some columns with optional argument `columns?`
   /**
    * Get row from table by id
    *
-   * Returns undefined if row doesn't exist
-   *
-   * Accepts optional columns to only get those
+   * @param idArg id of row
+   * @returns data of row if row exists, `undefined` if row doesn't exist
    */
+  // todo: add optional columns argument to only get some columns instead of all
   async getById(idArg: unknown): Promise<z.infer<typeof tmp> | undefined> {
     const id = this.#idSchema.parse(idArg);
 
@@ -114,6 +120,8 @@ export class Table<TableName extends string> {
 
   /**
    * Delete row from table by id
+   * 
+   * @param idArg id of row
    */
   async deleteById(idArg: unknown): Promise<void> {
     const id = this.#idSchema.parse(idArg);
@@ -128,8 +136,12 @@ export class Table<TableName extends string> {
   }
 
   /**
-   * Update row in table
+   * Update row in table by id
+   * 
+   * @param idArg id of row
+   * @param rowArg data to update row with
    */
+  // todo: allow partial data to update only some columns instead of all
   async updateById(idArg: unknown, rowArg: unknown): Promise<void> {
     const id = this.#idSchema.parse(idArg);
     const row = this.#tableSchema.parse(rowArg);
