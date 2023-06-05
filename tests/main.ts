@@ -21,14 +21,17 @@ const schema = {
 
 const db = await createDatabase(schema, "./tests/main.db");
 
-await db.from("countries").insert({ name: "USA", color: "blue" });
+const id = await db.from("countries").insert({ name: "USA", color: "blue" });
 
-const a = await db.from("countries").getById(1n);
-console.log(a);
+const a = await db.from("countries").getById(id);
+console.log(id, a);
 
-await db.from("countries").deleteById(1n);
+await db.from("countries").deleteById(id);
 
-await db.from("countries").updateById(4n, { name: "USB" });
+const b = await db.from("countries").getById(id);
+console.log(id, b);
 
-const b = await db.from("countries").getById(4n);
-console.log(b);
+await db.from("countries").updateById(id, { name: "USB" });
+
+const c = await db.from("countries").getById(id);
+console.log(id, c);

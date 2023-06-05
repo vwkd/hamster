@@ -66,7 +66,7 @@ export class Table<TableName extends string> {
    *
    * Automatically generates autoincrementing ID
    */
-  async insert(rowArg: unknown): Promise<void> {
+  async insert(rowArg: unknown): Promise<bigint> {
     const row = this.#tableSchema.parse(rowArg);
 
     const id = await this.#nextId(this.#tableName);
@@ -75,6 +75,8 @@ export class Table<TableName extends string> {
       const key = [this.#tableName, id, columnName];
       await this.#db.set(key, value);
     }
+
+    return id;
   }
 
   // todo: only select certain columns if optional argument `columns?` provided
@@ -119,7 +121,11 @@ export class Table<TableName extends string> {
 
     const key = [this.#tableName, id];
 
-    return this.#db.delete(key);
+    const entries = this.#db.list({prefix: key});
+
+    for await (const entry of entries) {
+      this.#db.delete(entry.key);
+    }
   }
 
   /**
@@ -132,7 +138,7 @@ export class Table<TableName extends string> {
     const rowOld = await this.getById(id);
     
     if (!rowOld) {
-      throw new Error(`Table '${this.#tableName}' doesn't have a row with id '${id}'.`);
+      throw new Error(`A row with id '${id}' doesn't exist in table '${this.#tableName}'.`);
     }
 
     for (const [columnName, value] of Object.entries(row)) {
