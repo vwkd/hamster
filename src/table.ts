@@ -1,17 +1,21 @@
-import { arr2obj, gen2arr } from "./utils.ts";
-import type { Schema } from "./types.ts";
+import { z } from "../deps.ts";
+import type { ZodType, ZodObject } from "../deps.ts";
 
-// todo: use atomic transactions
+export type TableSchema = { [k in string]: ZodType };
+
+// todo: use atomic transactions, also don't return `void` for set
 // todo: expose concurrency options to Deno KV methods
-export class Table {
+export class Table<TableName extends string> {
   #db: Deno.Kv;
-  #schema: Schema;
-  #tableName: string;
+  #tableName: TableName;
+  #idSchema = z.bigint();
+  #tableSchema: ZodObject<TableSchema>;
 
-  constructor(db: Deno.Kv, schema: Schema, tableName: string) {
+  // todo: is `ZodType` too general?
+  constructor(db: Deno.Kv, tableName: TableName, tableSchema: TableSchema) {
     this.#db = db;
-    this.#schema = schema;
     this.#tableName = tableName;
+    this.#tableSchema = z.object(tableSchema);
   }
 
   /**
@@ -23,7 +27,7 @@ export class Table {
    * note: assumes row keys are of type `bigint`!
    * beware: throws if last row key is not of type `bigint`!
    */
-  async #nextId(tableName: string): Promise<bigint> {
+  async #nextId(tableName: TableName): Promise<bigint> {
     const lastEntry = this.#db.list<bigint>({ prefix: [tableName] }, {
       limit: 1,
       reverse: true,
@@ -45,60 +49,81 @@ export class Table {
     }
   }
 
-  // todo: type obj
   /**
    * Add row to table
    *
    * Automatically generates autoincrementing ID
    */
-  async insert(obj: unknown) {
-    // todo: fix
+  async insert(rowArg: unknown): Promise<void> {
+    const row = this.#tableSchema.parse(rowArg);
+
     const id = await this.#nextId(this.#tableName);
-    for (const [columnName, value] of Object.entries(obj)) {
-      // todo: validate columnName is valid key
+
+    for (const [columnName, value] of Object.entries(row)) {
       const key = [this.#tableName, id, columnName];
       await this.#db.set(key, value);
     }
   }
 
-  // todo: restrict keys to strings
-  // todo: return proper return type if row doesn't exist
-  // todo: only select columns if optional argument `columns?` provided
+  // todo: only select certain columns if optional argument `columns?` provided
   /**
    * Get row from table by id
+   * 
+   * Returns undefined if row doesn't exist
    *
    * Accepts optional columns to only get those
    */
-  async getById(id: bigint) {
+  async getById(idArg: unknown): Promise<z.infer<typeof tmp> | undefined> {
+    const id = this.#idSchema.parse(idArg);
+
+    const tmp = this.#tableSchema;
+
     const key = [this.#tableName, id];
+
+    // todo: type entries and obj
     const entries = this.#db.list({ prefix: key });
 
-    const arr = await gen2arr(entries);
-    arr.forEach((el) => {
-      el.key = el.key.at(-1);
-    });
-    const res = arr2obj(arr, "key", "value");
+    const obj: z.infer<typeof tmp> = {};
 
-    return res;
+    for await (const entry of entries) {
+      const key = entry.key.at(-1)!;
+      const value = entry.value;
+      obj[key] = value;
+    }
+
+    // no columns, row doesn't exist
+    if (!Object.entries(obj).length) {
+      return undefined;
+    }
+
+    return obj;
   }
 
   /**
    * Delete row from table by id
    */
-  async deleteById(id: bigint) {
+  async deleteById(idArg: unknown): Promise<void> {
+    const id = this.#idSchema.parse(idArg);
+
     const key = [this.#tableName, id];
 
     return this.#db.delete(key);
   }
 
-  // todo: type obj
   /**
    * Update row in table
    */
-  async updateById(id: bigint, obj: unknown) {
-    // todo: check if row exists and throw otherwise
-    for (const [columnName, value] of Object.entries(obj)) {
-      // todo: validate columnName is valid key
+  async updateById(idArg: unknown, rowArg: unknown): Promise<void> {
+    const id = this.#idSchema.parse(idArg);
+    const row = this.#tableSchema.parse(rowArg);
+
+    const rowOld = await this.getById(id);
+    
+    if (!rowOld) {
+      throw new Error(`Table '${this.#tableName}' doesn't have a row with id '${id}'.`);
+    }
+
+    for (const [columnName, value] of Object.entries(row)) {
       const key = [this.#tableName, id, columnName];
       await this.#db.set(key, value);
     }

@@ -1,98 +1,23 @@
+import { z } from "../deps.ts";
 import { createDatabase } from "../src/main.ts";
-import type { Schema } from "../src/types.ts";
 
-const schema: Schema = {
-  tables: [
-    {
-      name: "countries",
-      columns: [
-        {
-          name: "id",
-          type: "bigint",
-          autoincrement: true,
-          primary_key: true,
-        },
-        {
-          name: "name",
-          type: "string",
-        },
-      ],
-    },
-    {
-      name: "capitals",
-      columns: [
-        {
-          name: "id",
-          type: "bigint",
-          autoincrement: true,
-          primary_key: true,
-        },
-        {
-          name: "name",
-          type: "string",
-          // secondary_index: true,
-        },
-        {
-          name: "countryId",
-          type: "bigint",
-          foreign_key_to: "countries",
-          // add_reverse_key: true,
-        },
-      ],
-    },
-    {
-      name: "cities",
-      columns: [
-        {
-          name: "id",
-          type: "bigint",
-          autoincrement: true,
-          primary_key: true,
-        },
-        {
-          name: "name",
-          type: "string",
-          // secondary_index: true,
-        },
-        {
-          name: "countryId",
-          type: "bigint",
-          foreign_key_to: "countries",
-          // add_reverse_key: true,
-        },
-      ],
-    },
-    {
-      name: "languages",
-      columns: [
-        {
-          name: "id",
-          type: "bigint",
-          autoincrement: true,
-          primary_key: true,
-        },
-        {
-          name: "name",
-          type: "string",
-          // secondary_index: true,
-        },
-        {
-          name: "countryId",
-          type: "bigint",
-          foreign_key_to: "countries",
-          multiple: true,
-          // add_reverse_key: true,
-        },
-      ],
-    },
-  ],
+const schema = {
+  "countries": {
+    "name": z.string(),
+    "color": z.string().optional(),
+  }
 };
 
 const db = await createDatabase(schema, "./tests/main.db");
 
 await db.from("countries").insert({ name: "USA", color: "blue" });
-const country1 = await db.from("countries").getById(1n);
+
+const a = await db.from("countries").getById(1n);
+console.log(a);
 
 await db.from("countries").deleteById(1n);
 
-await db.from("countries").updateById(1n, { name: "USA" });
+await db.from("countries").updateById(4n, { name: "USB" });
+
+const b = await db.from("countries").getById(4n);
+console.log(b);

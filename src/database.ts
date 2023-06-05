@@ -1,17 +1,21 @@
 import { Table } from "./table.ts";
-import type { Schema } from "./types.ts";
+import type { TableSchema } from "./table.ts";
+
+export type DatabaseSchema = {
+  [k in string]: TableSchema;
+}
 
 export class Database {
   #db: Deno.Kv;
-  #schema: Schema;
+  #schema: DatabaseSchema;
 
-  constructor(db: Deno.Kv, schema: Schema) {
+  constructor(db: Deno.Kv, schema: DatabaseSchema) {
     this.#db = db;
     this.#schema = schema;
   }
 
-  // todo: type tableName, also downstream
-  from(tableName: string) {
-    return new Table(this.#db, this.#schema, tableName);
+  from<TableName extends string>(tableName: TableName) {
+    const tableSchema = this.#schema[tableName];
+    return new Table<TableName>(this.#db, tableName, tableSchema);
   }
 }
