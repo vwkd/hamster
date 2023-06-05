@@ -27,7 +27,7 @@ export class Table<TableName extends string> {
   constructor(db: Deno.Kv, tableName: TableName, tableSchema: TableSchema) {
     this.#db = db;
     this.#tableName = tableName;
-    this.#tableSchema = z.object(buildZodSchema(tableSchema));
+    this.#tableSchema = z.object(buildZodSchema(tableSchema)).strict();
   }
 
   /**
