@@ -9,7 +9,10 @@ export interface DatabaseSchema {
 export class Database {
   #db: Deno.Kv;
   #schema: DatabaseSchema;
-  #tableNameSchema = z.string();
+  #tableNameSchema = z.string({
+    required_error: "table name is required",
+    invalid_type_error: "table name must be a string",
+  });
 
   /**
    * A relational wrapper for the Deno KV database

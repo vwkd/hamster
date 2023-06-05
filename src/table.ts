@@ -27,7 +27,10 @@ export interface RowCondition {
 export class Table<TableName extends string> {
   #db: Deno.Kv;
   #tableName: TableName;
-  #idSchema = z.bigint();
+  #idSchema = z.bigint({
+    required_error: "ID is required",
+    invalid_type_error: "ID must be a bigint",
+  });
   // todo: infer type from tableSchema such that it doesn't lose type information, also in `row.ts`
   #tableSchema: ZodObject<{ [k in string]: ZodType }>;
 
@@ -41,7 +44,10 @@ export class Table<TableName extends string> {
   constructor(db: Deno.Kv, tableName: TableName, tableSchema: TableSchema) {
     this.#db = db;
     this.#tableName = tableName;
-    this.#tableSchema = z.object(buildZodSchema(tableSchema)).strict();
+    this.#tableSchema = z.object(buildZodSchema(tableSchema), {
+      required_error: "table schema is required",
+      invalid_type_error: "table schema must be an object",
+    }).strict();
   }
 
   /**
