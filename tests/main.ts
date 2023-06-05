@@ -1,4 +1,4 @@
-import { Database } from "../src/main.ts";
+import { createDatabase } from "../src/main.ts";
 import type { Schema } from "../src/main.ts";
 
 const schema: Schema = {
@@ -88,8 +88,7 @@ const schema: Schema = {
   ],
 };
 
-const db = await Database(schema, "./tests/main.db");
+const db = await createDatabase(schema, "./tests/main.db");
 
-await db.add("countries", { name: "USA" });
-const country1 = await db.getById("countries", 1n);
-
+await db.from("countries").add({ name: "USA", color: "blue" });
+const country1 = await db.from("countries").getById(1n);

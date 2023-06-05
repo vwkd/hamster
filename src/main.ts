@@ -33,41 +33,68 @@ export interface Column3 extends ColumnBase {
 
 // ... more columns
 
-export async function Database(schema: Schema, path?: string) {
+export async function createDatabase(schema: Schema, path?: string) {
   const db = await Deno.openKv(path);
 
+  return new Database(db, schema);
+}
+
+class Database {
+  #db: Deno.Kv;
+  #schema: Schema;
+
+  constructor(db: Deno.Kv, schema: Schema) {
+    this.#db = db;
+    this.#schema = schema;
+  }
+
+  // todo: type tableName, also downstream
+  from(tableName: string) {
+    return new Table(this.#db, this.#schema, tableName)
+  }
+
+}
+
+// todo: use atomic transactions
+// todo: expose concurrency options to Deno KV methods
+class Table {
+  #db: Deno.Kv;
+  #schema: Schema;
+  #tableName: string;
+
+  constructor(db: Deno.Kv, schema: Schema, tableName: string) {
+    this.#db = db;
+    this.#schema = schema;
+    this.#tableName = tableName;
+  }
+
   // todo: type obj
-  // todo: set atomically in one transaction
-  // todo: type tableName
-  // todo: add set options
   /**
    * Add row to table
    * 
    * Automatically generates autoincrementing ID
    */
-  async function add(tableName: string, obj: unknown) {
+  async add(obj: unknown) {
     // todo: fix
     const id = 1n;
     for (const [columnName, value] of Object.entries(obj)) {
       // todo: validate columnName is valid key
-      const key = [tableName, id, columnName];
-      await db.set(key, value);
+      const key = [this.#tableName, id, columnName];
+      await this.#db.set(key, value);
     }
   }
 
   // todo: restrict keys to strings
   // todo: return proper return type if row doesn't exist
   // todo: only select columns if optional argument `columns?` provided
-  // todo: type tableName
-  // todo: add get options
   /**
    * Get row from table by id
    * 
    * Accepts optional columns to only get those
    */
-  async function getById(tableName: string, id: bigint) {
-    const key = [tableName, id];
-    const entries = db.list({ prefix: key });
+  async getById(id: bigint) {
+    const key = [this.#tableName, id];
+    const entries = this.#db.list({ prefix: key });
 
     const arr = await gen2arr(entries);
     arr.forEach((el) => { el.key = el.key.at(-1) });
@@ -75,9 +102,4 @@ export async function Database(schema: Schema, path?: string) {
 
     return res;
   }
-
-  return {
-    getById,
-    add,
-  };
 }
