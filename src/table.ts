@@ -23,7 +23,6 @@ export interface RowCondition {
 }
 
 // todo: expose concurrency options to Deno KV methods
-// beware: doesn't validate output, assumes database is always valid!
 export class Table<TableName extends string> {
   #db: Deno.Kv;
   #tableName: TableName;

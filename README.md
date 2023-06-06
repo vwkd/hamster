@@ -8,7 +8,7 @@ A relational API for Deno KV
 
 - insert, read, update and delete rows of tables
 - automatic auto-incrementing IDs
-- structured, validates input against schema (not output)
+- schema-fixed, validates all input against schema
 
 
 
@@ -75,7 +75,9 @@ console.log(id, c);
 
 ## TODO
 
+- full type inference for TypeScript, use proper TypeScript types, make type inference work
 - support one-to-one, many-to-one and many-to-many relationships, automatically join relationships on read
-- use proper TypeScript types, make type inference work
 - use atomic transactions to avoid race conditions on Deno Deploy, also handle unsuccessful `set`s, etc.
 - migrations to change schema
+- support secondary indeces
+- queries to select multiple rows based on condition

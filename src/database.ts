@@ -16,6 +16,11 @@ export class Database {
 
   /**
    * A relational wrapper for the Deno KV database
+   *
+   * - insert, read, update and delete rows of tables
+   * - automatic auto-incrementing IDs
+   * - schema-fixed, validates all input against schema
+   * - beware: doesn't validate output against schema, assumes database doesn't get corrupted through manual use!
    * @param db the Deno.KV database
    * @param schema the database schema
    */
