@@ -7,7 +7,10 @@ import type { DatabaseSchema } from "./database.ts";
  * @param path optional path of the database
  * @returns an instance of `Database`
  */
-export async function openDatabase(schema: DatabaseSchema, path?: string) {
+export async function openDatabase(
+  schema: Readonly<DatabaseSchema>,
+  path?: string,
+): Promise<Database> {
   const db = await Deno.openKv(path);
 
   return new Database(db, schema);

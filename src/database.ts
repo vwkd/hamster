@@ -1,15 +1,18 @@
 import { z } from "../deps.ts";
 import { Table } from "./table.ts";
 import type { TableSchema } from "./table.ts";
+import type { ElementType } from "./utils.ts";
 
 export interface DatabaseSchema {
   tables: TableSchema[];
 }
 
+export type TableName = ElementType<Readonly<DatabaseSchema>["tables"]>["name"];
+
 export class Database {
   #db: Deno.Kv;
-  #schema: DatabaseSchema;
-  #tableNameSchema = z.string({
+  #schema: Readonly<DatabaseSchema>;
+  #tableNameSchemaZod = z.string({
     required_error: "table name is required",
     invalid_type_error: "table name must be a string",
   });
@@ -24,7 +27,7 @@ export class Database {
    * @param db the Deno.KV database
    * @param schema the database schema
    */
-  constructor(db: Deno.Kv, schema: DatabaseSchema) {
+  constructor(db: Deno.Kv, schema: Readonly<DatabaseSchema>) {
     this.#db = db;
     this.#schema = schema;
   }
@@ -34,10 +37,11 @@ export class Database {
    * @param tableNameArg the table name
    * @returns an instance of `Table`
    */
-  // todo: does string literal propagate? maybe try
-  // type StringLiteral<T> = T extends string ? string extends T ? never : T : never;
-  from<TableName extends string>(tableNameArg: TableName) {
-    const tableName = this.#tableNameSchema.parse(tableNameArg) as TableName;
+  // todo: type `tableNameArg` as literal string, also pass downstream into `Table`
+  // needs type variable `<TableName extends string>`?
+  // needs `type StringLiteral<T> = T extends string ? string extends T ? never : T : never;`?
+  from(tableNameArg: TableName): Table {
+    const tableName = this.#tableNameSchemaZod.parse(tableNameArg);
 
     const tableSchema = this.#schema.tables.find((table) =>
       table.name == tableName
@@ -46,6 +50,7 @@ export class Database {
     if (!tableSchema) {
       throw new Error(`A table with name '${tableName}' doesn't exist.`);
     }
-    return new Table<TableName>(this.#db, tableName, tableSchema);
+
+    return new Table(this.#db, tableName, tableSchema);
   }
 }

@@ -1,27 +1,28 @@
 import type { z, ZodObject, ZodType } from "../deps.ts";
-import type { TableSchema } from "./table.ts";
+import type { TableName } from "./database.ts";
+import type { RowData, TableSchemaZod } from "./table.ts";
 
-export class Row<TableName extends string> {
+export class Row {
   #db: Deno.Kv;
   #tableName: TableName;
-  #tableSchema: ZodObject<{ [k in string]: ZodType }>;
+  #tableSchemaZod: TableSchemaZod;
   #id: bigint;
 
   /**
    * An interface for a row
    * @param db the Deno KV database
    * @param tableName the table name
-   * @param tableSchema the table schema
+   * @param tableSchemaZod the table schema
    */
   constructor(
     db: Deno.Kv,
     tableName: TableName,
-    tableSchema: TableSchema,
+    tableSchemaZod: TableSchemaZod,
     id: bigint,
   ) {
     this.#db = db;
     this.#tableName = tableName;
-    this.#tableSchema = tableSchema;
+    this.#tableSchemaZod = tableSchemaZod;
     this.#id = id;
   }
 
@@ -31,18 +32,16 @@ export class Row<TableName extends string> {
    * @returns data of row if row exists, `undefined` if row doesn't exist
    */
   // todo: add optional columns argument to only get some columns instead of all
-  async get(): Promise<z.infer<typeof tmp> | undefined> {
-    const tmp = this.#tableSchema.strict();
-
+  async get(): Promise<RowData | undefined> {
     const key = [this.#tableName, this.#id];
 
-    // todo: type entries and obj
+    // todo: type entries `list<..>`
     const entries = this.#db.list({ prefix: key });
 
-    const obj: z.infer<typeof tmp> = {};
+    const obj: RowData = {};
 
     for await (const entry of entries) {
-      const key = entry.key.at(-1)!;
+      const key = entry.key.at(-1)! as string;
       const value = entry.value;
       obj[key] = value;
     }
@@ -73,8 +72,8 @@ export class Row<TableName extends string> {
    *
    * @param rowArg data to update row with
    */
-  async update(rowArg: unknown): Promise<void> {
-    const row = this.#tableSchema.partial().parse(rowArg);
+  async update(rowArg: RowData): Promise<void> {
+    const row = this.#tableSchemaZod.partial().parse(rowArg);
 
     const rowOld = await this.get();
 

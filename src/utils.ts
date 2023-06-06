@@ -1,15 +1,25 @@
 import { TableSchema } from "./table.ts";
 
+export type TableSchemaZod = {
+  [K in ElementType<TableSchema["columns"]>["name"]]: ElementType<
+    TableSchema["columns"]
+  >["type"];
+};
+
 /**
- * Transform table schema to Zod schema
+ * Build table schema for Zod from table schema of user
  *
- * Creates object with keys from the name properties of columns
- * and values from the type properties of columns
+ * Creates object with keys from the `name` property of columns
+ * and values from the `type` property of columns
  */
-// todo: type key from TableSchema.columns[].name and value from TableSchema.columns[].type
-export function buildZodSchema(tableSchema: TableSchema) {
-  return tableSchema.columns.reduce((result, column) => {
+export function buildTableSchemaZod(tableSchema: TableSchema): TableSchemaZod {
+  const columns = tableSchema.columns;
+  return columns.reduce((result, column) => {
     result[column.name] = column.type;
     return result;
-  }, {});
+  }, {} as TableSchemaZod);
 }
+
+export type ElementType<T extends Iterable<any>> = T extends Iterable<infer E>
+  ? E
+  : never;

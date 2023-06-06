@@ -1,7 +1,8 @@
 import { z } from "../deps.ts";
 import type { ZodObject, ZodType } from "../deps.ts";
+import type { TableName } from "./database.ts";
 import { Row } from "./row.ts";
-import { buildZodSchema } from "./utils.ts";
+import { buildTableSchemaZod } from "./utils.ts";
 
 export interface TableSchema {
   name: string;
@@ -13,6 +14,13 @@ export interface ColumnSchema {
   type: ZodType;
 }
 
+// todo: infer type from tableSchema such that it doesn't lose type information, also in `row.ts`
+// todo: is `ZodType` right type, needs generic type variables?
+export type TableSchemaZod = ZodObject<{ [x: string]: ZodType }>;
+
+// todo: infer type from tableSchema such that it doesn't lose type information, also in `row.ts`
+export type RowData = z.infer<TableSchemaZod>;
+
 /**
  * Condition of row
  *
@@ -22,16 +30,15 @@ export interface RowCondition {
   eq: { id: bigint };
 }
 
-// todo: expose concurrency options to Deno KV methods
-export class Table<TableName extends string> {
+// todo: expose concurrency options to Deno KV methods, also downstream in `row.ts`
+export class Table {
   #db: Deno.Kv;
   #tableName: TableName;
-  #idSchema = z.bigint({
+  #idSchemaZod = z.bigint({
     required_error: "ID is required",
     invalid_type_error: "ID must be a bigint",
   });
-  // todo: infer type from tableSchema such that it doesn't lose type information, also in `row.ts`
-  #tableSchema: ZodObject<{ [k in string]: ZodType }>;
+  #tableSchemaZod: TableSchemaZod;
 
   /**
    * An interface for a table
@@ -39,11 +46,11 @@ export class Table<TableName extends string> {
    * @param tableName the table name
    * @param tableSchema the table schema
    */
-  // todo: is `ZodType` too general?
+  // todo: type `tableSchema` as value for key `tableName` from `schema` in `database.ts`
   constructor(db: Deno.Kv, tableName: TableName, tableSchema: TableSchema) {
     this.#db = db;
     this.#tableName = tableName;
-    this.#tableSchema = z.object(buildZodSchema(tableSchema), {
+    this.#tableSchemaZod = z.object(buildTableSchemaZod(tableSchema), {
       required_error: "table schema is required",
       invalid_type_error: "table schema must be an object",
     });
@@ -86,9 +93,8 @@ export class Table<TableName extends string> {
    * @param rowArg data to insert into row
    * @returns id of new row
    */
-  // todo: type rowArg, also downstream in `row.ts`
-  async insert(rowArg: unknown): Promise<bigint> {
-    const row = this.#tableSchema.strict().parse(rowArg);
+  async insert(rowArg: RowData): Promise<bigint> {
+    const row = this.#tableSchemaZod.strict().parse(rowArg);
 
     const id = await this.#generateRowId(this.#tableName);
 
@@ -105,9 +111,9 @@ export class Table<TableName extends string> {
    * @param condition condition of row
    * @returns an instance of `Row`
    */
-  where(condition: RowCondition) {
-    const id = this.#idSchema.parse(condition?.eq?.id);
+  where(condition: RowCondition): Row {
+    const id = this.#idSchemaZod.parse(condition?.eq?.id);
 
-    return new Row(this.#db, this.#tableName, this.#tableSchema, id);
+    return new Row(this.#db, this.#tableName, this.#tableSchemaZod, id);
   }
 }
