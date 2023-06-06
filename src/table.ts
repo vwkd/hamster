@@ -46,7 +46,7 @@ export class Table<TableName extends string> {
     this.#tableSchema = z.object(buildZodSchema(tableSchema), {
       required_error: "table schema is required",
       invalid_type_error: "table schema must be an object",
-    }).strict();
+    });
   }
 
   /**
@@ -88,7 +88,7 @@ export class Table<TableName extends string> {
    */
   // todo: type rowArg, also downstream in `row.ts`
   async insert(rowArg: unknown): Promise<bigint> {
-    const row = this.#tableSchema.parse(rowArg);
+    const row = this.#tableSchema.strict().parse(rowArg);
 
     const id = await this.#generateRowId(this.#tableName);
 

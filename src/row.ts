@@ -32,7 +32,7 @@ export class Row<TableName extends string> {
    */
   // todo: add optional columns argument to only get some columns instead of all
   async get(): Promise<z.infer<typeof tmp> | undefined> {
-    const tmp = this.#tableSchema;
+    const tmp = this.#tableSchema.strict();
 
     const key = [this.#tableName, this.#id];
 
@@ -73,9 +73,8 @@ export class Row<TableName extends string> {
    *
    * @param rowArg data to update row with
    */
-  // todo: allow partial data to update only some columns instead of all
   async update(rowArg: unknown): Promise<void> {
-    const row = this.#tableSchema.parse(rowArg);
+    const row = this.#tableSchema.partial().parse(rowArg);
 
     const rowOld = await this.get();
 

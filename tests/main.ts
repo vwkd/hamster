@@ -34,7 +34,7 @@ console.log(id, a);
 await db
   .from("countries")
   .where({ eq: { id } })
-  .update({ name: "USB" });
+  .update({ color: "red" });
 
 const b = await db
   .from("countries")
