@@ -55,19 +55,6 @@ export class Row {
   }
 
   /**
-   * Delete row from table
-   */
-  async delete(): Promise<void> {
-    const key = [this.#tableName, this.#id];
-
-    const entries = this.#db.list({ prefix: key });
-
-    for await (const entry of entries) {
-      this.#db.delete(entry.key);
-    }
-  }
-
-  /**
    * Update row in table
    *
    * @param rowArg data to update row with
@@ -86,6 +73,19 @@ export class Row {
     for (const [columnName, value] of Object.entries(row)) {
       const key = [this.#tableName, this.#id, columnName];
       await this.#db.set(key, value);
+    }
+  }
+
+  /**
+   * Delete row from table
+   */
+  async delete(): Promise<void> {
+    const key = [this.#tableName, this.#id];
+
+    const entries = this.#db.list({ prefix: key });
+
+    for await (const entry of entries) {
+      this.#db.delete(entry.key);
     }
   }
 }
