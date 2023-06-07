@@ -13,8 +13,6 @@ export class Row<
   #name: K;
   #schema: S;
   #id: bigint;
-  // todo: type correct?
-  #columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
   // todo: type better?
   #keys: string[][];
 
@@ -29,14 +27,13 @@ export class Row<
     name: K,
     schema: S,
     id: bigint,
+    columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>,
   ) {
     this.#db = db;
     this.#name = name;
     this.#schema = schema;
     this.#id = id;
-    // todo: somehow types don't propagate here, JavaScript works though
-    this.#columnNames = schema.keyof().options;
-    this.#keys = this.#columnNames.map(
+    this.#keys = columnNames.map(
       (columnName) => [this.#name, this.#id, columnName],
     );
   }

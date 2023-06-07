@@ -1,4 +1,5 @@
 import { z } from "../deps.ts";
+import type { enumUtil } from "../deps.ts";
 import type { Options } from "./main.ts";
 import { Row } from "./row.ts";
 import type { StringKeyOf } from "./utils.ts";
@@ -24,6 +25,8 @@ export class Table<
   #db: Deno.Kv;
   #name: K;
   #schema: S;
+  // todo: type correct? also in `row.ts`
+  #columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
 
   /**
    * An interface for a table
@@ -39,6 +42,9 @@ export class Table<
     this.#db = db;
     this.#name = name;
     this.#schema = schema;
+
+    // todo: somehow types don't propagate here, JavaScript works though, also in `row.ts`
+    this.#columnNames = schema.keyof().options;
   }
 
   /**
