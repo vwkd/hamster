@@ -6,7 +6,7 @@ import type { StringKeyOf } from "./utils.ts";
 const idArgSchema = z.bigint({
   required_error: "ID is required",
   invalid_type_error: "ID must be a bigint",
-});
+}).positive({ message: "ID must be positive" });
 
 /**
  * Condition of row
