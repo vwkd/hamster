@@ -36,7 +36,6 @@ export class Row<
    *
    * @returns data of row if row exists, `undefined` if row doesn't exist
    */
-  // todo: add optional columns argument to only get some columns instead of all
   async get(): Promise<z.infer<S> | undefined> {
     const key = [this.#name, this.#id];
 

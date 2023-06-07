@@ -71,4 +71,5 @@ console.log(id, c);
 - use atomic transactions to avoid race conditions on Deno Deploy, also handle unsuccessful `set`s, etc.
 - migrations to change schema
 - support secondary indeces
-- queries to select multiple rows based on condition
+- option to read only some columns instead of all
+- read multiple rows at once based on condition
