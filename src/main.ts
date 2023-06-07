@@ -1,5 +1,6 @@
 import { z, ZodType } from "../deps.ts";
 import { Database } from "./database.ts";
+import { isNonempty } from "./utils.ts";
 
 const pathSchema = z.string({
   invalid_type_error: "path must be a string",
@@ -19,8 +20,6 @@ const columnNameSchema = z.string({
   invalid_type_error: "column name must be a string",
 });
 
-// todo: require at least one key record, also in `optionsSchema`
-// {message: "table must have at least one column"}
 const tableSchema = z.record(
   columnNameSchema,
   columnSchema,
@@ -28,7 +27,7 @@ const tableSchema = z.record(
     required_error: "column schema is required",
     invalid_type_error: "column schema must be an object",
   },
-);
+).refine(isNonempty, { message: "table must have at least one column" });
 
 export const tableNameSchema = z.string({
   required_error: "table name is required",
@@ -42,7 +41,7 @@ const tablesSchema = z.record(
     required_error: "table schema is required",
     invalid_type_error: "table schema must be an object",
   },
-);
+).refine(isNonempty, { message: "database must have at least one table" });
 
 const optionsSchema = z.object({
   tables: tablesSchema,

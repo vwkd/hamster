@@ -1,6 +1,7 @@
 import { z } from "../deps.ts";
 import type { Options } from "./main.ts";
 import type { StringKeyOf } from "./utils.ts";
+import { isNonempty } from "./utils.ts";
 
 export class Row<
   O extends Options,
@@ -63,7 +64,9 @@ export class Row<
    * @param row data to update row with
    */
   async update(row: Partial<z.infer<z.ZodObject<S>>>): Promise<void> {
-    z.object(this.#schema).partial().parse(row);
+    z.object(this.#schema).partial().refine(isNonempty, {
+      message: "row must update at least one column",
+    }).parse(row);
 
     const rowOld = await this.get();
 
