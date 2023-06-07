@@ -93,8 +93,12 @@ export class Row<
 
     const entries = this.#db.list({ prefix: key });
 
+    const promises = [] as Promise<void>[];
+    
     for await (const entry of entries) {
-      this.#db.delete(entry.key);
+      promises.push(this.#db.delete(entry.key));
     }
+    
+    await Promise.all(promises);
   }
 }
