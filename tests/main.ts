@@ -21,29 +21,29 @@ if (res.ok) {
 
   const a = await db
     .from("countries")
-    .where(id)
+    .where({ id })
     .read();
   console.log(id, a);
 
   await db
     .from("countries")
-    .where(id)
+    .where({ id })
     .update({ color: "red" });
 
   const b = await db
     .from("countries")
-    .where(id)
+    .where({ id })
     .read();
   console.log(id, b);
 
   await db
     .from("countries")
-    .where(id)
+    .where({ id })
     .delete();
 
   const c = await db
     .from("countries")
-    .where(id)
+    .where({ id })
     .read();
   console.log(id, c);
 }

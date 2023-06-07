@@ -12,10 +12,18 @@ interface CommitResult extends Deno.KvCommitResult {
 
 type CommitError = Deno.KvCommitError;
 
-const idArgSchema = z.bigint({
+const idSchema = z.bigint({
   required_error: "ID is required",
   invalid_type_error: "ID must be a bigint",
 }).positive({ message: "ID must be positive" });
+
+const conditionSchema = z.object({
+  "id": idSchema,
+  // todo: parse column names here
+  // "versionstamps": z.unknown(),
+}).strict();
+
+export type Condition = z.infer<typeof conditionSchema>;
 
 export class Table<
   O extends Options,
@@ -124,13 +132,21 @@ export class Table<
    * @param id id of row
    * @returns an instance of `Row`
    */
-  where(id: bigint): Row<O, K, S> {
+  where(condition: Condition): Row<O, K, S> {
     try {
-      idArgSchema.parse(id);
+      conditionSchema.parse(condition);
     } catch (err) {
       throw createUserError(err);
     }
 
-    return new Row<O, K, S>(this.#db, this.#name, this.#schema, id);
+    const id = condition.id;
+
+    return new Row<O, K, S>(
+      this.#db,
+      this.#name,
+      this.#schema,
+      id,
+      this.#columnNames,
+    );
   }
 }
