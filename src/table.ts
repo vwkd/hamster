@@ -16,7 +16,6 @@ const idArgSchema = z.bigint({
   invalid_type_error: "ID must be a bigint",
 }).positive({ message: "ID must be positive" });
 
-// todo: expose concurrency options to Deno KV methods, also downstream in `row.ts`
 export class Table<
   O extends Options,
   K extends StringKeyOf<O["tables"]>,

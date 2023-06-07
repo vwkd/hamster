@@ -15,7 +15,8 @@ export class Database<O extends Options> {
    * - insert, read, update and delete rows of tables
    * - automatic auto-incrementing IDs
    * - schema-fixed, validates all input against schema
-   * - beware: doesn't validate output against schema, assumes database doesn't get corrupted through manual use!
+   *
+   * - beware: doesn't validate output against schema, assumes underlying database is valid!
    * @param db the Deno.KV database
    * @param options the database options
    */

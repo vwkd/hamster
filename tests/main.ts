@@ -22,7 +22,7 @@ if (res.ok) {
   const a = await db
     .from("countries")
     .where(id)
-    .get();
+    .read();
   console.log(id, a);
 
   await db
@@ -33,7 +33,7 @@ if (res.ok) {
   const b = await db
     .from("countries")
     .where(id)
-    .get();
+    .read();
   console.log(id, b);
 
   await db
@@ -44,7 +44,7 @@ if (res.ok) {
   const c = await db
     .from("countries")
     .where(id)
-    .get();
+    .read();
   console.log(id, c);
 }
 

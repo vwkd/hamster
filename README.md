@@ -40,7 +40,7 @@ if (res.ok) {
   const a = await db
     .from("countries")
     .where(id)
-    .get();
+    .read();
   console.log(id, a);
 
   await db
@@ -51,7 +51,7 @@ if (res.ok) {
   const b = await db
     .from("countries")
     .where(id)
-    .get();
+    .read();
   console.log(id, b);
 
   await db
@@ -62,7 +62,7 @@ if (res.ok) {
   const c = await db
     .from("countries")
     .where(id)
-    .get();
+    .read();
   console.log(id, c);
 }
 
@@ -73,9 +73,6 @@ db.close();
 
 ## TODO
 
-- support one-to-one, many-to-one and many-to-many relationships, automatically join relationships on read
-- use atomic transactions to avoid race conditions on Deno Deploy, also handle unsuccessful `set`s, etc.
-- migrations to change schema
-- support secondary indeces
+- read multiple rows at once based on condition, allow multiple IDs in `where`, but only makes sense for get?!
 - option to read only some columns instead of all
-- read multiple rows at once based on condition
+- support secondary indeces

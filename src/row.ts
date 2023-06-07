@@ -1,4 +1,5 @@
 import { z } from "../deps.ts";
+import type { enumUtil } from "../deps.ts";
 import type { Options } from "./main.ts";
 import type { StringKeyOf } from "./utils.ts";
 import { createUserError, customErrorMap, isNonempty } from "./utils.ts";
@@ -12,6 +13,10 @@ export class Row<
   #name: K;
   #schema: S;
   #id: bigint;
+  // todo: type correct?
+  #columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
+  // todo: type better?
+  #keys: string[][];
 
   /**
    * An interface for a row
@@ -29,40 +34,51 @@ export class Row<
     this.#name = name;
     this.#schema = schema;
     this.#id = id;
+    // todo: somehow types don't propagate here, JavaScript works though
+    this.#columnNames = schema.keyof().options;
+    this.#keys = this.#columnNames.map(
+      (columnName) => [this.#name, this.#id, columnName],
+    );
   }
 
   /**
-   * Get row from table
-   *
-   * @returns data of row if row exists, `undefined` if row doesn't exist
+   * Read row from table
+   * @returns row if exists, `undefined` otherwise
    */
-  async get(): Promise<z.infer<S> | undefined> {
-    const key = [this.#name, this.#id];
+  // todo: return versionstamps to check, but how since stored at multiple keys?
+  async read(options?: Deno.KvListOptions): Promise<z.infer<S> | undefined> {
+    // todo: type `getMany<..>` with array of property values of `z.infer<S>`, also in `update`
+    const entries = await this.#db.getMany(this.#keys, options);
 
-    const entries = this.#db.list<z.infer<S>>({ prefix: key });
+    const row = {} as z.infer<S>;
 
-    const obj = {} as z.infer<S>;
-
-    for await (const entry of entries) {
-      const key = entry.key.at(-1)! as keyof z.infer<S>;
-      const value = entry.value as z.infer<S>[typeof key];
-      obj[key] = value;
+    for (const entry of entries) {
+      if (entry.versionstamp) {
+        // column is non-null, add to row
+        // todo: remove type assertions after adds types above
+        const key = entry.key.at(-1)! as keyof z.infer<S>;
+        const value = entry.value as z.infer<S>[typeof key];
+        row[key] = value;
+      } else {
+        // column is null, noop
+      }
     }
 
     // no columns, row doesn't exist
-    if (!Object.entries(obj).length) {
+    if (!Object.entries(row).length) {
       return undefined;
     }
 
-    return obj;
+    return row;
   }
 
   /**
    * Update row in table
-   *
    * @param row data to update row with
    */
-  async update(row: Partial<z.infer<S>>): Promise<void> {
+  async update(
+    row: Partial<z.infer<S>>,
+  ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
     try {
       this.#schema.partial().refine(isNonempty, {
         message: "row must update at least one column",
@@ -71,34 +87,41 @@ export class Row<
       throw createUserError(err);
     }
 
-    const rowOld = await this.get();
+    const entries = await this.#db.getMany(this.#keys);
 
-    if (!rowOld) {
+    const columnCount =
+      entries.filter((column) => column.versionstamp !== null).length;
+
+    if (!columnCount) {
       throw new Error(
         `A row with id '${this.#id}' doesn't exist in table '${this.#name}'.`,
       );
     }
 
+    let op = this.#db.atomic();
+
+    for (const entry of entries) {
+      op = op.check(entry);
+    }
+
     for (const [columnName, value] of Object.entries(row)) {
       const key = [this.#name, this.#id, columnName];
-      await this.#db.set(key, value);
+      op = op.set(key, value);
     }
+
+    return op.commit();
   }
 
   /**
    * Delete row from table
    */
-  async delete(): Promise<void> {
-    const key = [this.#name, this.#id];
+  async delete(): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
+    let op = this.#db.atomic();
 
-    const entries = this.#db.list({ prefix: key });
-
-    const promises = [] as Promise<void>[];
-    
-    for await (const entry of entries) {
-      promises.push(this.#db.delete(entry.key));
+    for (const key of this.#keys) {
+      op = op.delete(key);
     }
-    
-    await Promise.all(promises);
+
+    return op.commit();
   }
 }
