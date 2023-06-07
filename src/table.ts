@@ -2,6 +2,7 @@ import { z } from "../deps.ts";
 import type { Options } from "./main.ts";
 import { Row } from "./row.ts";
 import type { StringKeyOf } from "./utils.ts";
+import { createUserError } from "./utils.ts";
 
 const idArgSchema = z.bigint({
   required_error: "ID is required",
@@ -81,7 +82,14 @@ export class Table<
    * @returns id of new row
    */
   async insert(row: z.infer<z.ZodObject<S>>): Promise<bigint> {
-    z.object(this.#schema).strict().parse(row);
+    try {
+      z.object(this.#schema, {
+        required_error: "row is required",
+        invalid_type_error: "row must be an object",
+      }).strict().parse(row);
+    } catch (err) {
+      throw createUserError(err);
+    }
 
     const id = await this.#generateRowId(this.#name);
 
@@ -101,7 +109,11 @@ export class Table<
   where(condition: RowCondition): Row<O, K, S> {
     const id = condition?.eq?.id;
 
-    idArgSchema.parse(id);
+    try {
+      idArgSchema.parse(id);
+    } catch (err) {
+      throw createUserError(err);
+    }
 
     return new Row<O, K, S>(this.#db, this.#name, this.#schema, id);
   }

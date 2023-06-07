@@ -1,6 +1,6 @@
-import { z, ZodType } from "../deps.ts";
+import { fromZodError, z, ZodType } from "../deps.ts";
 import { Database } from "./database.ts";
-import { isNonempty } from "./utils.ts";
+import { createUserError, isNonempty } from "./utils.ts";
 
 const pathSchema = z.string({
   invalid_type_error: "path must be a string",
@@ -62,8 +62,17 @@ export async function openDatabase<O extends Options>(
   options: O,
   path?: Path,
 ): Promise<Database<O>> {
-  optionsSchema.parse(options);
-  pathSchema.parse(path);
+  try {
+    optionsSchema.parse(options);
+  } catch (err) {
+    throw createUserError(err);
+  }
+
+  try {
+    pathSchema.parse(path);
+  } catch (err) {
+    throw createUserError(err);
+  }
 
   const db = await Deno.openKv(path);
 

@@ -2,6 +2,7 @@ import { tableNameSchema } from "./main.ts";
 import type { Options } from "./main.ts";
 import { Table } from "./table.ts";
 import type { StringKeyOf } from "./utils.ts";
+import { createUserError } from "./utils.ts";
 
 export class Database<O extends Options> {
   #db: Deno.Kv;
@@ -30,7 +31,11 @@ export class Database<O extends Options> {
   from<K extends StringKeyOf<O["tables"]>>(
     name: K,
   ): Table<O, K, typeof schema> {
-    tableNameSchema.parse(name);
+    try {
+      tableNameSchema.parse(name);
+    } catch (err) {
+      throw createUserError(err);
+    }
 
     // note: somehow needs this narrowing type cast otherwhise `typeof schema` errors
     // `Type 'Record<string, ZodTypeAny>' does not satisfy the constraint 'O["tables"][K]'.deno-ts(2344)`
