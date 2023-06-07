@@ -1,7 +1,7 @@
 import { z } from "../deps.ts";
 import type { Options } from "./main.ts";
 import type { StringKeyOf } from "./utils.ts";
-import { createUserError, isNonempty } from "./utils.ts";
+import { createUserError, customErrorMap, isNonempty } from "./utils.ts";
 
 export class Row<
   O extends Options,
@@ -67,7 +67,7 @@ export class Row<
     try {
       this.#schema.partial().refine(isNonempty, {
         message: "row must update at least one column",
-      }).parse(row);
+      }).parse(row, { errorMap: customErrorMap });
     } catch (err) {
       throw createUserError(err);
     }

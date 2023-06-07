@@ -2,6 +2,7 @@ import { z } from "../deps.ts";
 import type { Options } from "./main.ts";
 import { Row } from "./row.ts";
 import type { StringKeyOf } from "./utils.ts";
+import { customErrorMap } from "./utils.ts";
 import { createUserError } from "./utils.ts";
 
 const idArgSchema = z.bigint({
@@ -83,7 +84,7 @@ export class Table<
    */
   async insert(row: z.infer<S>): Promise<bigint> {
     try {
-      this.#schema.strict().parse(row);
+      this.#schema.strict().parse(row, { errorMap: customErrorMap });
     } catch (err) {
       throw createUserError(err);
     }
