@@ -1,17 +1,72 @@
+import { z, ZodType } from "../deps.ts";
 import { Database } from "./database.ts";
-import type { DatabaseSchema } from "./database.ts";
+
+const pathSchema = z.string({
+  invalid_type_error: "path must be a string",
+}).optional();
+
+type Path = z.infer<typeof pathSchema>;
+
+// todo: constrain to values accepted by Deno KV
+const columnSchema = z.custom<z.ZodTypeAny>((schema) => {
+  if (schema instanceof ZodType) {
+    return true;
+  }
+}, { message: "type must be a valid Zod schema" });
+
+const columnNameSchema = z.string({
+  required_error: "column name is required",
+  invalid_type_error: "column name must be a string",
+});
+
+// todo: require at least one key record, also in `optionsSchema`
+// {message: "table must have at least one column"}
+const tableSchema = z.record(
+  columnNameSchema,
+  columnSchema,
+  {
+    required_error: "column schema is required",
+    invalid_type_error: "column schema must be an object",
+  },
+);
+
+export const tableNameSchema = z.string({
+  required_error: "table name is required",
+  invalid_type_error: "table name must be a string",
+});
+
+const tablesSchema = z.record(
+  tableNameSchema,
+  tableSchema,
+  {
+    required_error: "table schema is required",
+    invalid_type_error: "table schema must be an object",
+  },
+);
+
+const optionsSchema = z.object({
+  tables: tablesSchema,
+}, {
+  required_error: "database schema is required",
+  invalid_type_error: "database schema must be an object",
+}).strict();
+
+export type Options = z.infer<typeof optionsSchema>;
 
 /**
  * Open a database
- * @param schema database schema
+ * @param options database options
  * @param path optional path of the database
  * @returns an instance of `Database`
  */
-export async function openDatabase(
-  schema: Readonly<DatabaseSchema>,
-  path?: string,
-): Promise<Database> {
+export async function openDatabase<O extends Options>(
+  options: O,
+  path?: Path,
+): Promise<Database<O>> {
+  optionsSchema.parse(options);
+  pathSchema.parse(path);
+
   const db = await Deno.openKv(path);
 
-  return new Database(db, schema);
+  return new Database<O>(db, options);
 }

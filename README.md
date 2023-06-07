@@ -9,6 +9,7 @@ A relational API for Deno KV
 - insert, read, update and delete rows of tables
 - automatic auto-incrementing IDs
 - schema-fixed, validates all input against schema
+- full TypeScript type inference
 
 
 
@@ -18,25 +19,16 @@ A relational API for Deno KV
 import { z } from "https://raw.githubusercontent.com/vwkd/hamster/main/deps.ts";
 import { openDatabase } from "https://raw.githubusercontent.com/vwkd/hamster/main/src/main.ts";
 
-const schema = {
-  tables: [
-    {
-      name: "countries",
-      columns: [
-        {
-          name: "name",
-          type: z.string(),
-        },
-        {
-          name: "color",
-          type: z.string().optional(),
-        },
-      ],
+const options = {
+  tables: {
+    "countries": {
+      "name": z.string(),
+      "color": z.string().optional(),
     },
-  ],
+  },
 };
 
-const db = await openDatabase(schema);
+const db = await openDatabase(options);
 
 const id = await db
   .from("countries")
@@ -75,7 +67,6 @@ console.log(id, c);
 
 ## TODO
 
-- full type inference for TypeScript, use proper TypeScript types, make type inference work
 - support one-to-one, many-to-one and many-to-many relationships, automatically join relationships on read
 - use atomic transactions to avoid race conditions on Deno Deploy, also handle unsuccessful `set`s, etc.
 - migrations to change schema

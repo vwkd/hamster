@@ -1,21 +1,11 @@
-import { z } from "../deps.ts";
+import { tableNameSchema } from "./main.ts";
+import type { Options } from "./main.ts";
 import { Table } from "./table.ts";
-import type { TableSchema } from "./table.ts";
-import type { ElementType } from "./utils.ts";
+import type { StringKeyOf } from "./utils.ts";
 
-export interface DatabaseSchema {
-  tables: TableSchema[];
-}
-
-export type TableName = ElementType<Readonly<DatabaseSchema>["tables"]>["name"];
-
-export class Database {
+export class Database<O extends Options> {
   #db: Deno.Kv;
-  #schema: Readonly<DatabaseSchema>;
-  #tableNameSchemaZod = z.string({
-    required_error: "table name is required",
-    invalid_type_error: "table name must be a string",
-  });
+  #options: O;
 
   /**
    * A relational wrapper for the Deno KV database
@@ -25,32 +15,31 @@ export class Database {
    * - schema-fixed, validates all input against schema
    * - beware: doesn't validate output against schema, assumes database doesn't get corrupted through manual use!
    * @param db the Deno.KV database
-   * @param schema the database schema
+   * @param options the database options
    */
-  constructor(db: Deno.Kv, schema: Readonly<DatabaseSchema>) {
+  constructor(db: Deno.Kv, options: O) {
     this.#db = db;
-    this.#schema = schema;
+    this.#options = options;
   }
 
   /**
    * Get interface to table
-   * @param tableNameArg the table name
+   * @param name the table name
    * @returns an instance of `Table`
    */
-  // todo: type `tableNameArg` as literal string, also pass downstream into `Table`
-  // needs type variable `<TableName extends string>`?
-  // needs `type StringLiteral<T> = T extends string ? string extends T ? never : T : never;`?
-  from(tableNameArg: TableName): Table {
-    const tableName = this.#tableNameSchemaZod.parse(tableNameArg);
+  from<K extends StringKeyOf<O["tables"]>>(
+    name: K,
+  ): Table<O, K, typeof schema> {
+    tableNameSchema.parse(name);
 
-    const tableSchema = this.#schema.tables.find((table) =>
-      table.name == tableName
-    );
+    // note: somehow needs this narrowing type cast otherwhise `typeof schema` errors
+    // `Type 'Record<string, ZodTypeAny>' does not satisfy the constraint 'O["tables"][K]'.deno-ts(2344)`
+    const schema = this.#options.tables[name] as O["tables"][K];
 
-    if (!tableSchema) {
-      throw new Error(`A table with name '${tableName}' doesn't exist.`);
+    if (!schema) {
+      throw new Error(`A table with name '${name}' doesn't exist.`);
     }
 
-    return new Table(this.#db, tableName, tableSchema);
+    return new Table<O, K, typeof schema>(this.#db, name, schema);
   }
 }

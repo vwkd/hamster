@@ -1,25 +1,12 @@
 import { z } from "../deps.ts";
-import type { ZodObject, ZodType } from "../deps.ts";
-import type { TableName } from "./database.ts";
+import type { Options } from "./main.ts";
 import { Row } from "./row.ts";
-import { buildTableSchemaZod } from "./utils.ts";
+import type { StringKeyOf } from "./utils.ts";
 
-export interface TableSchema {
-  name: string;
-  columns: ColumnSchema[];
-}
-
-export interface ColumnSchema {
-  name: string;
-  type: ZodType;
-}
-
-// todo: infer type from tableSchema such that it doesn't lose type information, also in `row.ts`
-// todo: is `ZodType` right type, needs generic type variables?
-export type TableSchemaZod = ZodObject<{ [x: string]: ZodType }>;
-
-// todo: infer type from tableSchema such that it doesn't lose type information, also in `row.ts`
-export type RowData = z.infer<TableSchemaZod>;
+const idArgSchema = z.bigint({
+  required_error: "ID is required",
+  invalid_type_error: "ID must be a bigint",
+});
 
 /**
  * Condition of row
@@ -31,42 +18,42 @@ export interface RowCondition {
 }
 
 // todo: expose concurrency options to Deno KV methods, also downstream in `row.ts`
-export class Table {
+export class Table<
+  O extends Options,
+  K extends StringKeyOf<O["tables"]>,
+  S extends O["tables"][K],
+> {
   #db: Deno.Kv;
-  #tableName: TableName;
-  #idSchemaZod = z.bigint({
-    required_error: "ID is required",
-    invalid_type_error: "ID must be a bigint",
-  });
-  #tableSchemaZod: TableSchemaZod;
+  #name: K;
+  #schema: S;
 
   /**
    * An interface for a table
    * @param db the Deno KV database
-   * @param tableName the table name
-   * @param tableSchema the table schema
+   * @param name the table name
+   * @param schema the table schema
    */
-  // todo: type `tableSchema` as value for key `tableName` from `schema` in `database.ts`
-  constructor(db: Deno.Kv, tableName: TableName, tableSchema: TableSchema) {
+  constructor(
+    db: Deno.Kv,
+    name: K,
+    schema: S,
+  ) {
     this.#db = db;
-    this.#tableName = tableName;
-    this.#tableSchemaZod = z.object(buildTableSchemaZod(tableSchema), {
-      required_error: "table schema is required",
-      invalid_type_error: "table schema must be an object",
-    });
+    this.#name = name;
+    this.#schema = schema;
   }
 
   /**
    * Generate autoincrementing ID for new row of table
    *
-   * @param tableName table name
+   * @param name table name
    * @returns last row key plus `1n`
    *
    * note: assumes row keys are of type `bigint`!
    * beware: throws if last row key is not of type `bigint`!
    */
-  async #generateRowId(tableName: TableName): Promise<bigint> {
-    const lastEntry = this.#db.list<bigint>({ prefix: [tableName] }, {
+  async #generateRowId(name: K): Promise<bigint> {
+    const lastEntry = this.#db.list<bigint>({ prefix: [name] }, {
       limit: 1,
       reverse: true,
     });
@@ -90,16 +77,16 @@ export class Table {
   /**
    * Add row to table
    *
-   * @param rowArg data to insert into row
+   * @param row data to insert into row
    * @returns id of new row
    */
-  async insert(rowArg: RowData): Promise<bigint> {
-    const row = this.#tableSchemaZod.strict().parse(rowArg);
+  async insert(row: z.infer<z.ZodObject<S>>): Promise<bigint> {
+    z.object(this.#schema).strict().parse(row);
 
-    const id = await this.#generateRowId(this.#tableName);
+    const id = await this.#generateRowId(this.#name);
 
     for (const [columnName, value] of Object.entries(row)) {
-      const key = [this.#tableName, id, columnName];
+      const key = [this.#name, id, columnName];
       await this.#db.set(key, value);
     }
 
@@ -111,9 +98,11 @@ export class Table {
    * @param condition condition of row
    * @returns an instance of `Row`
    */
-  where(condition: RowCondition): Row {
-    const id = this.#idSchemaZod.parse(condition?.eq?.id);
+  where(condition: RowCondition): Row<O, K, S> {
+    const id = condition?.eq?.id;
 
-    return new Row(this.#db, this.#tableName, this.#tableSchemaZod, id);
+    idArgSchema.parse(id);
+
+    return new Row<O, K, S>(this.#db, this.#name, this.#schema, id);
   }
 }

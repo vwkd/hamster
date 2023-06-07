@@ -1,25 +1,16 @@
 import { z } from "../deps.ts";
 import { openDatabase } from "../src/main.ts";
 
-const schema = {
-  tables: [
-    {
-      name: "countries",
-      columns: [
-        {
-          name: "name",
-          type: z.string(),
-        },
-        {
-          name: "color",
-          type: z.string().optional(),
-        },
-      ],
+const options = {
+  tables: {
+    "countries": {
+      "name": z.string(),
+      "color": z.string().optional(),
     },
-  ],
+  },
 };
 
-const db = await openDatabase(schema, "./tests/main.db");
+const db = await openDatabase(options, ":memory:");
 
 const id = await db
   .from("countries")
