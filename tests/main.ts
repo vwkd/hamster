@@ -43,3 +43,5 @@ const c = await db
   .where(id)
   .get();
 console.log(id, c);
+
+db.close();

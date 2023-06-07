@@ -52,4 +52,12 @@ export class Database<O extends Options> {
 
     return new Table<O, K, typeof schema>(this.#db, name, schema);
   }
+
+  /**
+   * Close the database connection
+   * @returns void
+   */
+  close(): void {
+    return this.#db.close();
+  }
 }
