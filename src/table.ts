@@ -5,6 +5,12 @@ import type { StringKeyOf } from "./utils.ts";
 import { customErrorMap } from "./utils.ts";
 import { createUserError } from "./utils.ts";
 
+interface CommitResult extends Deno.KvCommitResult {
+  id: bigint;
+}
+
+type CommitError = Deno.KvCommitError;
+
 const idArgSchema = z.bigint({
   required_error: "ID is required",
   invalid_type_error: "ID must be a bigint",
@@ -37,31 +43,41 @@ export class Table<
   }
 
   /**
-   * Generate autoincrementing ID for new row of table
+   * Generate auto-incrementing ID for new row of table
    *
+   * If last row exists set new id to row id plus `1n`
+   * otherwise to `1n`
+   *
+   * beware: assumes all row keys are of type `bigint`!
    * @param name table name
-   * @returns last row key plus `1n`
-   *
-   * note: assumes row keys are of type `bigint`!
-   * beware: throws if last row key is not of type `bigint`!
+   * @returns object with new id and last row to check that it didn't change in meantime
    */
-  async #generateRowId(name: K): Promise<bigint> {
-    const lastEntry = this.#db.list<bigint>({ prefix: [name] }, {
+  async #generateRowId(
+    name: K,
+  ): Promise<{ id: bigint; lastRow: Deno.AtomicCheck }> {
+    const lastEntry = this.#db.list({ prefix: [name] }, {
       limit: 1,
       reverse: true,
     });
     const { done, value } = await lastEntry.next();
 
+    // no last row
     if (done && !value) {
-      return 1n;
+      // new row is first row
+      const id = 1n;
+
+      // set last row to first row, `null` versionstamp checks that it doesn't exist
+      const lastRow = { key: [name, id], versionstamp: null };
+
+      return { id, lastRow };
+      // some last row, new row is next row
     } else if (!done && value) {
-      const id = value.key.at(1) as bigint;
-      if (typeof id != "bigint") {
-        throw new Error(
-          `expected last id '${id}' of type 'bigint' instead of '${typeof id}'`,
-        );
-      }
-      return id + 1n;
+      const lastId = value.key.at(1) as bigint;
+      const id = lastId + 1n;
+
+      const lastRow = value;
+
+      return { id, lastRow };
     } else {
       throw new Error("unreachable");
     }
@@ -69,25 +85,33 @@ export class Table<
 
   /**
    * Add row to table
-   *
    * @param row data to insert into row
    * @returns id of new row
    */
-  async insert(row: z.infer<S>): Promise<bigint> {
+  async insert(row: z.infer<S>): Promise<CommitResult | CommitError> {
     try {
       this.#schema.strict().parse(row, { errorMap: customErrorMap });
     } catch (err) {
       throw createUserError(err);
     }
 
-    const id = await this.#generateRowId(this.#name);
+    const { lastRow, id } = await this.#generateRowId(this.#name);
+
+    let op = this.#db.atomic()
+      .check(lastRow);
 
     for (const [columnName, value] of Object.entries(row)) {
       const key = [this.#name, id, columnName];
-      await this.#db.set(key, value);
+      op = op.set(key, value);
     }
 
-    return id;
+    const res = await op.commit();
+
+    if (res.ok) {
+      return { id, ...res };
+    } else {
+      return res;
+    }
   }
 
   /**
