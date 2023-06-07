@@ -36,29 +36,29 @@ const id = await db
 
 const a = await db
   .from("countries")
-  .where({ eq: { id } })
+  .where(id)
   .get();
 console.log(id, a);
 
 await db
   .from("countries")
-  .where({ eq: { id } })
+  .where(id)
   .update({ color: "red" });
 
 const b = await db
   .from("countries")
-  .where({ eq: { id } })
+  .where(id)
   .get();
 console.log(id, b);
 
 await db
   .from("countries")
-  .where({ eq: { id } })
+  .where(id)
   .delete();
 
 const c = await db
   .from("countries")
-  .where({ eq: { id } })
+  .where(id)
   .get();
 console.log(id, c);
 ```

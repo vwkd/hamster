@@ -10,15 +10,6 @@ const idArgSchema = z.bigint({
   invalid_type_error: "ID must be a bigint",
 }).positive({ message: "ID must be positive" });
 
-/**
- * Condition of row
- *
- * Currently only by id
- */
-export interface RowCondition {
-  eq: { id: bigint };
-}
-
 // todo: expose concurrency options to Deno KV methods, also downstream in `row.ts`
 export class Table<
   O extends Options,
@@ -100,13 +91,11 @@ export class Table<
   }
 
   /**
-   * Get interface to row by condition
-   * @param condition condition of row
+   * Get interface to row by id
+   * @param id id of row
    * @returns an instance of `Row`
    */
-  where(condition: RowCondition): Row<O, K, S> {
-    const id = condition?.eq?.id;
-
+  where(id: bigint): Row<O, K, S> {
     try {
       idArgSchema.parse(id);
     } catch (err) {
