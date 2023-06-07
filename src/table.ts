@@ -22,7 +22,7 @@ export interface RowCondition {
 export class Table<
   O extends Options,
   K extends StringKeyOf<O["tables"]>,
-  S extends O["tables"][K],
+  S extends z.ZodObject<O["tables"][K]>,
 > {
   #db: Deno.Kv;
   #name: K;
@@ -81,12 +81,9 @@ export class Table<
    * @param row data to insert into row
    * @returns id of new row
    */
-  async insert(row: z.infer<z.ZodObject<S>>): Promise<bigint> {
+  async insert(row: z.infer<S>): Promise<bigint> {
     try {
-      z.object(this.#schema, {
-        required_error: "row is required",
-        invalid_type_error: "row must be an object",
-      }).strict().parse(row);
+      this.#schema.strict().parse(row);
     } catch (err) {
       throw createUserError(err);
     }

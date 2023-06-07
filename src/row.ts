@@ -6,7 +6,7 @@ import { createUserError, isNonempty } from "./utils.ts";
 export class Row<
   O extends Options,
   K extends StringKeyOf<O["tables"]>,
-  S extends O["tables"][K],
+  S extends z.ZodObject<O["tables"][K]>,
 > {
   #db: Deno.Kv;
   #name: K;
@@ -37,16 +37,16 @@ export class Row<
    * @returns data of row if row exists, `undefined` if row doesn't exist
    */
   // todo: add optional columns argument to only get some columns instead of all
-  async get(): Promise<z.infer<z.ZodObject<S>> | undefined> {
+  async get(): Promise<z.infer<S> | undefined> {
     const key = [this.#name, this.#id];
 
-    const entries = this.#db.list<z.infer<z.ZodObject<S>>>({ prefix: key });
+    const entries = this.#db.list<z.infer<S>>({ prefix: key });
 
-    const obj = {} as z.infer<z.ZodObject<S>>;
+    const obj = {} as z.infer<S>;
 
     for await (const entry of entries) {
-      const key = entry.key.at(-1)! as keyof z.infer<z.ZodObject<S>>;
-      const value = entry.value as z.infer<z.ZodObject<S>>[typeof key];
+      const key = entry.key.at(-1)! as keyof z.infer<S>;
+      const value = entry.value as z.infer<S>[typeof key];
       obj[key] = value;
     }
 
@@ -63,12 +63,9 @@ export class Row<
    *
    * @param row data to update row with
    */
-  async update(row: Partial<z.infer<z.ZodObject<S>>>): Promise<void> {
+  async update(row: Partial<z.infer<S>>): Promise<void> {
     try {
-      z.object(this.#schema, {
-        required_error: "row is required",
-        invalid_type_error: "row must be an object",
-      }).partial().refine(isNonempty, {
+      this.#schema.partial().refine(isNonempty, {
         message: "row must update at least one column",
       }).parse(row);
     } catch (err) {

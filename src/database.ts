@@ -1,3 +1,4 @@
+import { z } from "../deps.ts";
 import { tableNameSchema } from "./main.ts";
 import type { Options } from "./main.ts";
 import { Table } from "./table.ts";
@@ -39,9 +40,13 @@ export class Database<O extends Options> {
 
     // note: somehow needs this narrowing type cast otherwhise `typeof schema` errors
     // `Type 'Record<string, ZodTypeAny>' does not satisfy the constraint 'O["tables"][K]'.deno-ts(2344)`
-    const schema = this.#options.tables[name] as O["tables"][K];
+    const tableSchema = this.#options.tables[name];
+    const schema = z.object(tableSchema, {
+      required_error: "row is required",
+      invalid_type_error: "row must be an object",
+    }) as z.ZodObject<O["tables"][K]>;
 
-    if (!schema) {
+    if (!tableSchema) {
       throw new Error(`A table with name '${name}' doesn't exist.`);
     }
 
