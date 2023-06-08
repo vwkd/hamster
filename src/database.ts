@@ -80,7 +80,6 @@ type Key<O extends Options> = StringKeyOf<O["tables"]>;
 
 type Schema<O extends Options, K extends Key<O>> = z.ZodObject<O["tables"][K]>;
 
-// todo: add missing doc comments to class properties
 export class Database<O extends Options> {
   /**
    * the Deno.KV database
@@ -100,6 +99,9 @@ export class Database<O extends Options> {
    */
   // note: definite assignment assertion since assigned before use in `#from`
   #schema!: Schema<O, Key<O>>;
+  /**
+   * array of column names
+   */
   // todo: type correct?
   // note: definite assignment assertion since assigned before use in `#from`
   #columnNames!: enumUtil.UnionToTupleString<keyof z.infer<Schema<O, Key<O>>>>;
@@ -108,6 +110,9 @@ export class Database<O extends Options> {
    */
   // note: definite assignment assertion since assigned before use in `#where`
   #condition!: Condition<z.infer<Schema<O, Key<O>>>>;
+  /**
+   * array of column keys
+   */
   // todo: type better?
   // note: definite assignment assertion since assigned before use in `#where`
   #keys!: string[][];
