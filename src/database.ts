@@ -20,8 +20,23 @@ type CommitError = Deno.KvCommitError;
 
 const idSchema = z.bigint().positive({ message: "'id' must be positive" });
 
+const readConditionSchema = z.object({
+  "id": idSchema,
+}, {
+  required_error: "condition is required",
+  invalid_type_error: "condition must be an object",
+}).strict();
+
+// note: same as `z.infer<readConditionSchema>`, manual declaration to add argument description
+interface ReadCondition {
+  /**
+   * id of row
+   */
+  id: bigint;
+}
+
 // note: here can only create builder, since `columnNames` is available only inside class at runtime
-function conditionSchemaBuilder(columnNames: string[]) {
+function writeConditionSchemaBuilder(columnNames: string[]) {
   return z.object({
     "id": idSchema,
     "versionstamps": z.object(
@@ -37,12 +52,8 @@ function conditionSchemaBuilder(columnNames: string[]) {
   }).strict();
 }
 
-// note: can't infer type with `z.infer<conditionSchema>` since `conditionSchema` only known at runtime
-interface Condition<T> {
-  /**
-   * id of row
-   */
-  id: bigint;
+// note: can't infer type with `z.infer<writeConditionSchema>` since `writeConditionSchema` only known at runtime
+interface WriteCondition<T> extends ReadCondition {
   /**
    * optional versionstamps for atomic transaction check in mutation methods
    */
@@ -106,15 +117,20 @@ export class Database<O extends Options> {
   // note: definite assignment assertion since assigned before use in `#tableInit`
   #columnNames!: enumUtil.UnionToTupleString<keyof z.infer<Schema<O, Key<O>>>>;
   /**
-   * condition of row
+   * condition of row for writing
    */
-  // note: definite assignment assertion since assigned before use in `#rowInit`
-  #condition!: Condition<z.infer<Schema<O, Key<O>>>>;
+  // note: definite assignment assertion since assigned before use in `#rowInitWrite`
+  #writeCondition!: WriteCondition<z.infer<Schema<O, Key<O>>>>;
+  /**
+   * condition of row for reading
+   */
+  // note: definite assignment assertion since assigned before use in `#rowInitRead`
+  #readCondition!: ReadCondition;
   /**
    * array of column keys
    */
   // todo: type better?
-  // note: definite assignment assertion since assigned before use in `#rowInit`
+  // note: definite assignment assertion since assigned before use in `#rowInitWrite` and `#rowInitRead`
   #keys!: string[][];
 
   /**
@@ -250,25 +266,48 @@ export class Database<O extends Options> {
   }
 
   /**
-   * Prepare interface to row by id
+   * Prepare interface to row by id for writing
    * @param name the table name
-   * @param condition condition of row
+   * @param writeCondition condition of row for writing
    */
-  #rowInit(name: Key<O>, condition: Condition<z.infer<Schema<O, Key<O>>>>): void {
+  #rowInitWrite(
+    name: Key<O>,
+    writeCondition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
+  ): void {
     this.#tableInit(name);
 
-    // note: here `z.infer<conditionSchema>` equals `Condition<z.infer<Schema<O, Key<O>>>>`
-    const conditionSchema = conditionSchemaBuilder(this.#columnNames);
+    // note: here `z.infer<writeConditionSchema>` equals `WriteCondition<z.infer<Schema<O, Key<O>>>>`
+    const writeConditionSchema = writeConditionSchemaBuilder(this.#columnNames);
 
     try {
-      conditionSchema.parse(condition);
+      writeConditionSchema.parse(writeCondition);
     } catch (err) {
       throw createUserError(err);
     }
 
-    this.#condition = condition;
+    this.#writeCondition = writeCondition;
     this.#keys = this.#columnNames.map(
-      (columnName) => [this.#name, this.#condition.id, columnName],
+      (columnName) => [this.#name, this.#writeCondition.id, columnName],
+    );
+  }
+
+  /**
+   * Prepare interface to row by id for reading
+   * @param name the table name
+   * @param readCondition condition of row for reading
+   */
+  #rowInitRead(name: Key<O>, readCondition: ReadCondition): void {
+    this.#tableInit(name);
+
+    try {
+      readConditionSchema.parse(readCondition);
+    } catch (err) {
+      throw createUserError(err);
+    }
+
+    this.#readCondition = readCondition;
+    this.#keys = this.#columnNames.map(
+      (columnName) => [this.#name, this.#readCondition.id, columnName],
     );
   }
 
@@ -282,13 +321,13 @@ export class Database<O extends Options> {
    */
   async read(
     name: Key<O>,
-    condition: Condition<z.infer<Schema<O, Key<O>>>>,
+    condition: ReadCondition,
     columns = Object.fromEntries(
       this.#columnNames.map((columnName) => [columnName, true]),
     ),
     options?: { consistency?: Deno.KvConsistencyLevel },
   ): Promise<RowResultMaybe<z.infer<Schema<O, Key<O>>>>> {
-    this.#rowInit(name, condition);
+    this.#rowInitRead(name, condition);
 
     const columnsSchema = columnsSchemaBuilder(this.#columnNames);
 
@@ -299,7 +338,7 @@ export class Database<O extends Options> {
     }
 
     const keys = Object.keys(columns).map(
-      (column) => [this.#name, this.#condition.id, column],
+      (column) => [this.#name, this.#readCondition.id, column],
     );
 
     // todo: type `getMany<..>` with array of property values of `z.infer<Schema<O, Key<O>>>`, also in `update`
@@ -326,12 +365,16 @@ export class Database<O extends Options> {
 
     // no columns, row doesn't exist
     if (!Object.entries(row).length) {
-      return { id: this.#condition.id, value: null, versionstamps } as NoResult<
+      return {
+        id: this.#readCondition.id,
+        value: null,
+        versionstamps,
+      } as NoResult<
         z.infer<Schema<O, Key<O>>>
       >;
     }
 
-    return { id: this.#condition.id, value: row, versionstamps };
+    return { id: this.#readCondition.id, value: row, versionstamps };
   }
 
   /**
@@ -344,10 +387,10 @@ export class Database<O extends Options> {
    */
   async update(
     name: Key<O>,
-    condition: Condition<z.infer<Schema<O, Key<O>>>>,
+    condition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
     row: Partial<z.infer<Schema<O, Key<O>>>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
-    this.#rowInit(name, condition);
+    this.#rowInitWrite(name, condition);
 
     try {
       this.#schema.partial().refine(isNonempty, {
@@ -364,17 +407,17 @@ export class Database<O extends Options> {
 
     if (!columnCount) {
       throw new Error(
-        `A row with id '${this.#condition.id}' doesn't exist in table '${this.#name}'.`,
+        `A row with id '${this.#writeCondition.id}' doesn't exist in table '${this.#name}'.`,
       );
     }
 
     let op = this.#db.atomic();
 
-    const versionstamps = this.#condition.versionstamps;
+    const versionstamps = this.#writeCondition.versionstamps;
     if (versionstamps) {
       for (const [columnName, versionstamp] of Object.entries(versionstamps)) {
         if (versionstamp !== undefined) {
-          const key = [this.#name, this.#condition.id, columnName];
+          const key = [this.#name, this.#writeCondition.id, columnName];
           op = op.check({ key, versionstamp });
         }
       }
@@ -385,7 +428,7 @@ export class Database<O extends Options> {
     }
 
     for (const [columnName, value] of Object.entries(row)) {
-      const key = [this.#name, this.#condition.id, columnName];
+      const key = [this.#name, this.#writeCondition.id, columnName];
       op = op.set(key, value);
     }
 
@@ -401,17 +444,17 @@ export class Database<O extends Options> {
    */
   async delete(
     name: Key<O>,
-    condition: Condition<z.infer<Schema<O, Key<O>>>>,
+    condition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
-    this.#rowInit(name, condition);
+    this.#rowInitWrite(name, condition);
 
     let op = this.#db.atomic();
 
-    const versionstamps = this.#condition.versionstamps;
+    const versionstamps = this.#writeCondition.versionstamps;
     if (versionstamps) {
       for (const [columnName, versionstamp] of Object.entries(versionstamps)) {
         if (versionstamp !== undefined) {
-          const key = [this.#name, this.#condition.id, columnName];
+          const key = [this.#name, this.#writeCondition.id, columnName];
           op = op.check({ key, versionstamp });
         }
       }
