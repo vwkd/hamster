@@ -83,6 +83,10 @@ function columnsSchemaBuilder(columnNames: string[]) {
         columnName,
       ) => [columnName, z.unknown().optional()]),
     ),
+    {
+      required_error: "columns is required",
+      invalid_type_error: "columns must be an object",
+    },
   ).strict().refine(isNonempty, {
     message: "columns must have at least one column",
   }).optional();
@@ -92,33 +96,29 @@ type Key<O extends Options> = StringKeyOf<O["tables"]>;
 
 type Schema<O extends Options, K extends Key<O>> = z.ZodObject<O["tables"][K]>;
 
-interface TableInit<
-  O extends Options,
-  K extends Key<O>,
-  S extends Schema<O, K>,
-> {
-  /**
-   * the table schema
-   */
-  schema: S;
-  /**
-   * array of column names
-   */
-  // todo: type correct?
-  columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
-}
-
-interface RowInit<O extends Options, K extends Key<O>, S extends Schema<O, K>> {
-  /**
-   * array of column keys
-   */
-  // todo: type better? `[K, keyof z.infer<S>, bigint][];`
-  keys: string[][];
-}
+/**
+ * array of column keys
+ */
+// todo: type correct?
+type ColumnKeys<O extends Options, K extends Key<O>, S extends Schema<O, K>> = [
+  K,
+  StringKeyOf<z.infer<S>>,
+  bigint,
+][];
 
 type Columns<O extends Options, K extends Key<O>, S extends Schema<O, K>> = {
   [K in keyof z.infer<S>]: unknown;
 };
+
+/**
+ * array of column names
+ */
+// todo: type correct?
+type ColumnNames<
+  O extends Options,
+  K extends Key<O>,
+  S extends Schema<O, K>,
+> = enumUtil.UnionToTupleString<keyof z.infer<S>>;
 
 export class Database<O extends Options> {
   /**
@@ -155,33 +155,44 @@ export class Database<O extends Options> {
   }
 
   /**
-   * Prepare interface to table
+   * Get table schema
    * @param name the table name
-   * @returns the table properties
+   * @returns the table schema
    */
-  #tableInit(name: Key<O>): TableInit<O, Key<O>, Schema<O, Key<O>>> {
+  #getTableSchema<K extends Key<O>>(name: K): Schema<O, K> {
     try {
       tableNameSchema.parse(name);
     } catch (err) {
       throw createUserError(err);
     }
 
-    // note: somehow needs this narrowing type cast otherwhise `typeof schema` errors
-    // `Type 'Record<string, ZodTypeAny>' does not satisfy the constraint 'O["tables"][K]'.deno-ts(2344)`
     const tableSchema = this.#options.tables[name];
-    const schema = z.object(tableSchema, {
-      required_error: "row is required",
-      invalid_type_error: "row must be an object",
-    }) as Schema<O, Key<O>>;
 
     if (!tableSchema) {
       throw new Error(`A table with name '${name}' doesn't exist.`);
     }
 
-    // todo: somehow types don't propagate here, JavaScript works though, also in `row.ts`
+    // note: somehow needs this narrowing type cast otherwhise errors
+    const schema = z.object(tableSchema, {
+      required_error: "row is required",
+      invalid_type_error: "row must be an object",
+    }) as Schema<O, K>;
+
+    return schema;
+  }
+
+  /**
+   * Get column names
+   * @param schema the table schema
+   * @returns array of column name strings
+   */
+  #getColumnNames<K extends Key<O>, S extends Schema<O, K>>(
+    schema: S,
+  ): ColumnNames<O, K, S> {
+    // todo: somehow types don't propagate here, JavaScript works though
     const columnNames = schema.keyof().options;
 
-    return { schema, columnNames };
+    return columnNames;
   }
 
   /**
@@ -231,11 +242,11 @@ export class Database<O extends Options> {
    * @param row data to insert into row
    * @returns id of new row
    */
-  async insert(
-    name: Key<O>,
-    row: z.infer<Schema<O, Key<O>>>,
+  async insert<K extends Key<O>, S extends Schema<O, K>>(
+    name: K,
+    row: z.infer<S>,
   ): Promise<CommitResult | CommitError> {
-    const { schema } = this.#tableInit(name);
+    const schema = this.#getTableSchema(name);
 
     try {
       schema.strict().parse(row, { errorMap: userErrorMap });
@@ -263,18 +274,15 @@ export class Database<O extends Options> {
   }
 
   /**
-   * Prepare interface to row by id for writing
+   * Verify row condition for writing
    * @param columnNames the column names
-   * @param name the table name
    * @param writeCondition condition of row for writing
-   * @returns the row properties
    */
-  #rowInitWrite(
-    columnNames: enumUtil.UnionToTupleString<keyof z.infer<Schema<O, Key<O>>>>,
-    name: Key<O>,
-    writeCondition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
-  ): RowInit<O, Key<O>, Schema<O, Key<O>>> {
-    // note: here `z.infer<writeConditionSchema>` equals `WriteCondition<z.infer<Schema<O, Key<O>>>>`
+  #verifyRowConditionWrite<K extends Key<O>, S extends Schema<O, K>>(
+    columnNames: ColumnNames<O, K, S>,
+    writeCondition: WriteCondition<z.infer<S>>,
+  ): void {
+    // note: here `z.infer<writeConditionSchema>` equals `WriteCondition<z.infer<S>>`
     const writeConditionSchema = writeConditionSchemaBuilder(columnNames);
 
     try {
@@ -282,37 +290,37 @@ export class Database<O extends Options> {
     } catch (err) {
       throw createUserError(err);
     }
-
-    const keys = columnNames.map(
-      (columnName) => [name, writeCondition.id, columnName],
-    );
-
-    return { keys };
   }
 
   /**
-   * Prepare interface to row by id for reading
-   * @param columnNames the column names
-   * @param name the table name
+   * Verify row condition for reading
    * @param readCondition condition of row for reading
-   * @returns the row properties
    */
-  #rowInitRead(
-    columnNames: enumUtil.UnionToTupleString<keyof z.infer<Schema<O, Key<O>>>>,
-    name: Key<O>,
-    readCondition: ReadCondition,
-  ): RowInit<O, Key<O>, Schema<O, Key<O>>> {
+  #verifyRowConditionRead(readCondition: ReadCondition): void {
     try {
       readConditionSchema.parse(readCondition);
     } catch (err) {
       throw createUserError(err);
     }
+  }
 
+  /**
+   * Get column keys
+   * @param name the table name
+   * @param id the row id
+   * @param columnNames the column names
+   * @returns the column keys
+   */
+  #getColumnKeys<K extends Key<O>, S extends Schema<O, K>>(
+    name: K,
+    id: bigint,
+    columnNames: ColumnNames<O, K, S>,
+  ): ColumnKeys<O, K, S> {
     const keys = columnNames.map(
-      (columnName) => [name, readCondition.id, columnName],
+      (columnName) => [name, id, columnName],
     );
 
-    return { keys };
+    return keys;
   }
 
   /**
@@ -323,14 +331,16 @@ export class Database<O extends Options> {
    * @param options optional options to Deno KV
    * @returns `RowResult` if row exists, `NoResult` otherwise
    */
-  async read(
-    name: Key<O>,
+  async read<K extends Key<O>, S extends Schema<O, K>>(
+    name: K,
     condition: ReadCondition,
-    columns: Columns<O, Key<O>, Schema<O, Key<O>>>,
+    columns?: Partial<Columns<O, K, S>>,
     options?: { consistency?: Deno.KvConsistencyLevel },
-  ): Promise<RowResultMaybe<z.infer<Schema<O, Key<O>>>>> {
-    const { columnNames } = this.#tableInit(name);
-    const { keys: keysAll } = this.#rowInitRead(columnNames, name, condition);
+  ): Promise<RowResultMaybe<z.infer<S>>> {
+    const schema = this.#getTableSchema(name);
+    const columnNames = this.#getColumnNames(schema);
+    this.#verifyRowConditionRead(condition);
+    const keysAll = this.#getColumnKeys(name, condition.id, columnNames);
 
     const columnsSchema = columnsSchemaBuilder(columnNames);
 
@@ -346,20 +356,20 @@ export class Database<O extends Options> {
       )
       : keysAll;
 
-    // todo: type `getMany<..>` with array of property values of `z.infer<Schema<O, Key<O>>>`, also in `update`
+    // todo: type `getMany<..>` with array of property values of `z.infer<S>`, also in `update`
     const entries = await this.#db.getMany(keys, options);
 
-    const row = {} as z.infer<Schema<O, Key<O>>>;
-    // todo: remove type assertion after fixed type of `schema.keyof().options;` in `table.ts`
-    const versionstamps = {} as Versionstamps<z.infer<Schema<O, Key<O>>>>;
+    const row = {} as z.infer<S>;
+    // todo: remove type assertion after fixed type of `schema.keyof().options;`
+    const versionstamps = {} as Versionstamps<z.infer<S>>;
 
     for (const entry of entries) {
       // todo: remove type assertions after adds types above
-      const key = entry.key.at(-1)! as keyof z.infer<Schema<O, Key<O>>>;
+      const key = entry.key.at(-1)! as keyof z.infer<S>;
       if (entry.versionstamp) {
         // column is non-null, add to row
         // todo: remove type assertions after adds types above
-        const value = entry.value as z.infer<Schema<O, Key<O>>>[typeof key];
+        const value = entry.value as z.infer<S>[typeof key];
         row[key] = value;
         versionstamps[key] = entry.versionstamp;
       } else {
@@ -373,10 +383,8 @@ export class Database<O extends Options> {
       return {
         id: condition.id,
         value: null,
-        versionstamps,
-      } as NoResult<
-        z.infer<Schema<O, Key<O>>>
-      >;
+        versionstamps: versionstamps as NoVersionstamps<z.infer<S>>,
+      };
     }
 
     return { id: condition.id, value: row, versionstamps };
@@ -390,13 +398,15 @@ export class Database<O extends Options> {
    * @param condition condition of row
    * @param row data to update row with
    */
-  async update(
-    name: Key<O>,
-    condition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
-    row: Partial<z.infer<Schema<O, Key<O>>>>,
+  async update<K extends Key<O>, S extends Schema<O, K>>(
+    name: K,
+    condition: WriteCondition<z.infer<S>>,
+    row: Partial<z.infer<S>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
-    const { schema, columnNames } = this.#tableInit(name);
-    const { keys } = this.#rowInitWrite(columnNames, name, condition);
+    const schema = this.#getTableSchema(name);
+    const columnNames = this.#getColumnNames(schema);
+    this.#verifyRowConditionWrite(columnNames, condition);
+    const keys = this.#getColumnKeys(name, condition.id, columnNames);
 
     try {
       schema.partial().refine(isNonempty, {
@@ -448,12 +458,14 @@ export class Database<O extends Options> {
    * @param name the table name
    * @param condition condition of row
    */
-  async delete(
-    name: Key<O>,
-    condition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
+  async delete<K extends Key<O>, S extends Schema<O, K>>(
+    name: K,
+    condition: WriteCondition<z.infer<S>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
-    const { columnNames } = this.#tableInit(name);
-    const { keys } = this.#rowInitWrite(columnNames, name, condition);
+    const schema = this.#getTableSchema(name);
+    const columnNames = this.#getColumnNames(schema);
+    this.#verifyRowConditionWrite(columnNames, condition);
+    const keys = this.#getColumnKeys(name, condition.id, columnNames);
 
     let op = this.#db.atomic();
 
