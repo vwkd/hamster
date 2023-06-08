@@ -36,6 +36,7 @@ interface ReadCondition {
 }
 
 // note: here can only create builder, since `columnNames` is available only inside class at runtime
+// todo: get schema of `WriteCondition`, `z.shapeof<..>`?, opposite of `z.infer<..>`, also for `columnsSchemaBuilder`
 function writeConditionSchemaBuilder(columnNames: string[]) {
   return z.object({
     "id": idSchema,
@@ -91,6 +92,34 @@ type Key<O extends Options> = StringKeyOf<O["tables"]>;
 
 type Schema<O extends Options, K extends Key<O>> = z.ZodObject<O["tables"][K]>;
 
+interface TableInit<
+  O extends Options,
+  K extends Key<O>,
+  S extends Schema<O, K>,
+> {
+  /**
+   * the table schema
+   */
+  schema: S;
+  /**
+   * array of column names
+   */
+  // todo: type correct?
+  columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
+}
+
+interface RowInit<O extends Options, K extends Key<O>, S extends Schema<O, K>> {
+  /**
+   * array of column keys
+   */
+  // todo: type better? `[K, keyof z.infer<S>, bigint][];`
+  keys: string[][];
+}
+
+type Columns<O extends Options, K extends Key<O>, S extends Schema<O, K>> = {
+  [K in keyof z.infer<S>]: unknown;
+};
+
 export class Database<O extends Options> {
   /**
    * the Deno.KV database
@@ -100,38 +129,6 @@ export class Database<O extends Options> {
    * the database options
    */
   #options: O;
-  /**
-   * the table name
-   */
-  // note: definite assignment assertion since assigned before use in `#tableInit`
-  #name!: Key<O>;
-  /**
-   * the table schema
-   */
-  // note: definite assignment assertion since assigned before use in `#tableInit`
-  #schema!: Schema<O, Key<O>>;
-  /**
-   * array of column names
-   */
-  // todo: type correct?
-  // note: definite assignment assertion since assigned before use in `#tableInit`
-  #columnNames!: enumUtil.UnionToTupleString<keyof z.infer<Schema<O, Key<O>>>>;
-  /**
-   * condition of row for writing
-   */
-  // note: definite assignment assertion since assigned before use in `#rowInitWrite`
-  #writeCondition!: WriteCondition<z.infer<Schema<O, Key<O>>>>;
-  /**
-   * condition of row for reading
-   */
-  // note: definite assignment assertion since assigned before use in `#rowInitRead`
-  #readCondition!: ReadCondition;
-  /**
-   * array of column keys
-   */
-  // todo: type better?
-  // note: definite assignment assertion since assigned before use in `#rowInitWrite` and `#rowInitRead`
-  #keys!: string[][];
 
   /**
    * A relational wrapper for the Deno KV database
@@ -160,8 +157,9 @@ export class Database<O extends Options> {
   /**
    * Prepare interface to table
    * @param name the table name
+   * @returns the table properties
    */
-  #tableInit(name: Key<O>): void {
+  #tableInit(name: Key<O>): TableInit<O, Key<O>, Schema<O, Key<O>>> {
     try {
       tableNameSchema.parse(name);
     } catch (err) {
@@ -180,11 +178,10 @@ export class Database<O extends Options> {
       throw new Error(`A table with name '${name}' doesn't exist.`);
     }
 
-    this.#name = name;
-    this.#schema = schema;
-
     // todo: somehow types don't propagate here, JavaScript works though, also in `row.ts`
-    this.#columnNames = schema.keyof().options;
+    const columnNames = schema.keyof().options;
+
+    return { schema, columnNames };
   }
 
   /**
@@ -238,21 +235,21 @@ export class Database<O extends Options> {
     name: Key<O>,
     row: z.infer<Schema<O, Key<O>>>,
   ): Promise<CommitResult | CommitError> {
-    this.#tableInit(name);
+    const { schema } = this.#tableInit(name);
 
     try {
-      this.#schema.strict().parse(row, { errorMap: userErrorMap });
+      schema.strict().parse(row, { errorMap: userErrorMap });
     } catch (err) {
       throw createUserError(err);
     }
 
-    const { lastRow, id } = await this.#generateRowId(this.#name);
+    const { lastRow, id } = await this.#generateRowId(name);
 
     let op = this.#db.atomic()
       .check(lastRow);
 
     for (const [columnName, value] of Object.entries(row)) {
-      const key = [this.#name, id, columnName];
+      const key = [name, id, columnName];
       op = op.set(key, value);
     }
 
@@ -267,17 +264,18 @@ export class Database<O extends Options> {
 
   /**
    * Prepare interface to row by id for writing
+   * @param columnNames the column names
    * @param name the table name
    * @param writeCondition condition of row for writing
+   * @returns the row properties
    */
   #rowInitWrite(
+    columnNames: enumUtil.UnionToTupleString<keyof z.infer<Schema<O, Key<O>>>>,
     name: Key<O>,
     writeCondition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
-  ): void {
-    this.#tableInit(name);
-
+  ): RowInit<O, Key<O>, Schema<O, Key<O>>> {
     // note: here `z.infer<writeConditionSchema>` equals `WriteCondition<z.infer<Schema<O, Key<O>>>>`
-    const writeConditionSchema = writeConditionSchemaBuilder(this.#columnNames);
+    const writeConditionSchema = writeConditionSchemaBuilder(columnNames);
 
     try {
       writeConditionSchema.parse(writeCondition);
@@ -285,30 +283,36 @@ export class Database<O extends Options> {
       throw createUserError(err);
     }
 
-    this.#writeCondition = writeCondition;
-    this.#keys = this.#columnNames.map(
-      (columnName) => [this.#name, this.#writeCondition.id, columnName],
+    const keys = columnNames.map(
+      (columnName) => [name, writeCondition.id, columnName],
     );
+
+    return { keys };
   }
 
   /**
    * Prepare interface to row by id for reading
+   * @param columnNames the column names
    * @param name the table name
    * @param readCondition condition of row for reading
+   * @returns the row properties
    */
-  #rowInitRead(name: Key<O>, readCondition: ReadCondition): void {
-    this.#tableInit(name);
-
+  #rowInitRead(
+    columnNames: enumUtil.UnionToTupleString<keyof z.infer<Schema<O, Key<O>>>>,
+    name: Key<O>,
+    readCondition: ReadCondition,
+  ): RowInit<O, Key<O>, Schema<O, Key<O>>> {
     try {
       readConditionSchema.parse(readCondition);
     } catch (err) {
       throw createUserError(err);
     }
 
-    this.#readCondition = readCondition;
-    this.#keys = this.#columnNames.map(
-      (columnName) => [this.#name, this.#readCondition.id, columnName],
+    const keys = columnNames.map(
+      (columnName) => [name, readCondition.id, columnName],
     );
+
+    return { keys };
   }
 
   /**
@@ -322,14 +326,13 @@ export class Database<O extends Options> {
   async read(
     name: Key<O>,
     condition: ReadCondition,
-    columns = Object.fromEntries(
-      this.#columnNames.map((columnName) => [columnName, true]),
-    ),
+    columns: Columns<O, Key<O>, Schema<O, Key<O>>>,
     options?: { consistency?: Deno.KvConsistencyLevel },
   ): Promise<RowResultMaybe<z.infer<Schema<O, Key<O>>>>> {
-    this.#rowInitRead(name, condition);
+    const { columnNames } = this.#tableInit(name);
+    const { keys: keysAll } = this.#rowInitRead(columnNames, name, condition);
 
-    const columnsSchema = columnsSchemaBuilder(this.#columnNames);
+    const columnsSchema = columnsSchemaBuilder(columnNames);
 
     try {
       columnsSchema.parse(columns);
@@ -337,9 +340,11 @@ export class Database<O extends Options> {
       throw createUserError(err);
     }
 
-    const keys = Object.keys(columns).map(
-      (column) => [this.#name, this.#readCondition.id, column],
-    );
+    const keys = columns && Object.keys(columns).length
+      ? Object.keys(columns).map(
+        (column) => [name, condition.id, column],
+      )
+      : keysAll;
 
     // todo: type `getMany<..>` with array of property values of `z.infer<Schema<O, Key<O>>>`, also in `update`
     const entries = await this.#db.getMany(keys, options);
@@ -366,7 +371,7 @@ export class Database<O extends Options> {
     // no columns, row doesn't exist
     if (!Object.entries(row).length) {
       return {
-        id: this.#readCondition.id,
+        id: condition.id,
         value: null,
         versionstamps,
       } as NoResult<
@@ -374,7 +379,7 @@ export class Database<O extends Options> {
       >;
     }
 
-    return { id: this.#readCondition.id, value: row, versionstamps };
+    return { id: condition.id, value: row, versionstamps };
   }
 
   /**
@@ -390,34 +395,35 @@ export class Database<O extends Options> {
     condition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
     row: Partial<z.infer<Schema<O, Key<O>>>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
-    this.#rowInitWrite(name, condition);
+    const { schema, columnNames } = this.#tableInit(name);
+    const { keys } = this.#rowInitWrite(columnNames, name, condition);
 
     try {
-      this.#schema.partial().refine(isNonempty, {
+      schema.partial().refine(isNonempty, {
         message: "row must update at least one column",
       }).parse(row, { errorMap: userErrorMap });
     } catch (err) {
       throw createUserError(err);
     }
 
-    const entries = await this.#db.getMany(this.#keys);
+    const entries = await this.#db.getMany(keys);
 
     const columnCount =
       entries.filter((column) => column.versionstamp !== null).length;
 
     if (!columnCount) {
       throw new Error(
-        `A row with id '${this.#writeCondition.id}' doesn't exist in table '${this.#name}'.`,
+        `A row with id '${condition.id}' doesn't exist in table '${name}'.`,
       );
     }
 
     let op = this.#db.atomic();
 
-    const versionstamps = this.#writeCondition.versionstamps;
+    const versionstamps = condition.versionstamps;
     if (versionstamps) {
       for (const [columnName, versionstamp] of Object.entries(versionstamps)) {
         if (versionstamp !== undefined) {
-          const key = [this.#name, this.#writeCondition.id, columnName];
+          const key = [name, condition.id, columnName];
           op = op.check({ key, versionstamp });
         }
       }
@@ -428,7 +434,7 @@ export class Database<O extends Options> {
     }
 
     for (const [columnName, value] of Object.entries(row)) {
-      const key = [this.#name, this.#writeCondition.id, columnName];
+      const key = [name, condition.id, columnName];
       op = op.set(key, value);
     }
 
@@ -446,21 +452,22 @@ export class Database<O extends Options> {
     name: Key<O>,
     condition: WriteCondition<z.infer<Schema<O, Key<O>>>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
-    this.#rowInitWrite(name, condition);
+    const { columnNames } = this.#tableInit(name);
+    const { keys } = this.#rowInitWrite(columnNames, name, condition);
 
     let op = this.#db.atomic();
 
-    const versionstamps = this.#writeCondition.versionstamps;
+    const versionstamps = condition.versionstamps;
     if (versionstamps) {
       for (const [columnName, versionstamp] of Object.entries(versionstamps)) {
         if (versionstamp !== undefined) {
-          const key = [this.#name, this.#writeCondition.id, columnName];
+          const key = [name, condition.id, columnName];
           op = op.check({ key, versionstamp });
         }
       }
     }
 
-    for (const key of this.#keys) {
+    for (const key of keys) {
       op = op.delete(key);
     }
 
