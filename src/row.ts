@@ -4,6 +4,20 @@ import type { Options } from "./main.ts";
 import type { StringKeyOf } from "./utils.ts";
 import { createUserError, customErrorMap, isNonempty } from "./utils.ts";
 
+type RowResult<T> = { id: bigint; value: T; versionstamps: Versionstamps<T> };
+
+type Versionstamps<T> = { [K in keyof T]: string | null };
+
+type RowResultMaybe<T> = RowResult<T> | NoResult<T>;
+
+type NoResult<T> = {
+  id: bigint;
+  value: null;
+  versionstamps: NoVersionstamps<T>;
+};
+
+type NoVersionstamps<T> = { [K in keyof T]: null };
+
 export class Row<
   O extends Options,
   K extends StringKeyOf<O["tables"]>,
@@ -13,6 +27,7 @@ export class Row<
   #name: K;
   #schema: S;
   #id: bigint;
+  #columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
   // todo: type better?
   #keys: string[][];
 
@@ -33,6 +48,7 @@ export class Row<
     this.#name = name;
     this.#schema = schema;
     this.#id = id;
+    this.#columnNames = columnNames;
     this.#keys = columnNames.map(
       (columnName) => [this.#name, this.#id, columnName],
     );
@@ -40,33 +56,41 @@ export class Row<
 
   /**
    * Read row from table
-   * @returns row if exists, `undefined` otherwise
+   * @returns `RowResult` if row exists, `NoResult` otherwise
    */
-  // todo: return versionstamps to check, but how since stored at multiple keys?
-  async read(options?: Deno.KvListOptions): Promise<z.infer<S> | undefined> {
+  async read(
+    options?: Deno.KvListOptions,
+  ): Promise<RowResultMaybe<z.infer<S>>> {
     // todo: type `getMany<..>` with array of property values of `z.infer<S>`, also in `update`
     const entries = await this.#db.getMany(this.#keys, options);
 
     const row = {} as z.infer<S>;
+    // todo: remove type assertion after fixed type of `schema.keyof().options;` in `table.ts`
+    const versionstamps = {} as Versionstamps<z.infer<S>>;
 
     for (const entry of entries) {
+      // todo: remove type assertions after adds types above
+      const key = entry.key.at(-1)! as keyof z.infer<S>;
       if (entry.versionstamp) {
         // column is non-null, add to row
         // todo: remove type assertions after adds types above
-        const key = entry.key.at(-1)! as keyof z.infer<S>;
         const value = entry.value as z.infer<S>[typeof key];
         row[key] = value;
+        versionstamps[key] = entry.versionstamp;
       } else {
-        // column is null, noop
+        // column is null, don't add to row
+        versionstamps[key] = null;
       }
     }
 
     // no columns, row doesn't exist
     if (!Object.entries(row).length) {
-      return undefined;
+      return { id: this.#id, value: null, versionstamps } as NoResult<
+        z.infer<S>
+      >;
     }
 
-    return row;
+    return { id: this.#id, value: row, versionstamps };
   }
 
   /**
