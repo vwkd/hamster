@@ -17,13 +17,36 @@ const idSchema = z.bigint({
   invalid_type_error: "ID must be a bigint",
 }).positive({ message: "ID must be positive" });
 
-const conditionSchema = z.object({
-  "id": idSchema,
-  // todo: parse column names here
-  // "versionstamps": z.unknown(),
-}).strict();
+// todo: better error messages using custom error map global
+// note: here can only create builder, since `columnNames` is available only inside class at runtime
+function conditionSchemaBuilder(columnNames: string[]) {
+  return z.object({
+    "id": idSchema,
+    "versionstamps": z.object(
+      Object.fromEntries(
+        columnNames.map((
+          columnName,
+        ) => [columnName, z.union([z.string(), z.null()]).optional()]),
+      ),
+    ).strict().optional(),
+  }).strict();
+}
 
-export type Condition = z.infer<typeof conditionSchema>;
+// note: can't infer type with `z.infer<conditionSchema>` since `conditionSchema` only known at runtime
+export interface Condition<T> {
+  /**
+   * id of row
+   */
+  id: bigint;
+  /**
+   * optional versionstamps for atomic transaction check in mutation methods
+   */
+  versionstamps?: Versionstamps<T>;
+}
+
+type Versionstamps<T> = {
+  [K in keyof T]?: string | null;
+};
 
 export class Table<
   O extends Options,
@@ -129,23 +152,24 @@ export class Table<
 
   /**
    * Get interface to row by id
-   * @param id id of row
+   * @param condition condition of row
    * @returns an instance of `Row`
    */
-  where(condition: Condition): Row<O, K, S> {
+  where(condition: Condition<z.infer<S>>): Row<O, K, S> {
+    // note: here `z.infer<conditionSchema>` equals `Condition<z.infer<S>>`
+    const conditionSchema = conditionSchemaBuilder(this.#columnNames);
+
     try {
       conditionSchema.parse(condition);
     } catch (err) {
       throw createUserError(err);
     }
 
-    const id = condition.id;
-
     return new Row<O, K, S>(
       this.#db,
       this.#name,
       this.#schema,
-      id,
+      condition,
       this.#columnNames,
     );
   }

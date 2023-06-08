@@ -1,6 +1,7 @@
 import { z } from "../deps.ts";
 import type { enumUtil } from "../deps.ts";
 import type { Options } from "./main.ts";
+import type { Condition } from "./table.ts";
 import type { StringKeyOf } from "./utils.ts";
 import { createUserError, customErrorMap, isNonempty } from "./utils.ts";
 
@@ -26,7 +27,7 @@ export class Row<
   #db: Deno.Kv;
   #name: K;
   #schema: S;
-  #id: bigint;
+  #condition: Condition<z.infer<S>>;
   #columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
   // todo: type better?
   #keys: string[][];
@@ -41,16 +42,16 @@ export class Row<
     db: Deno.Kv,
     name: K,
     schema: S,
-    id: bigint,
+    condition: Condition<z.infer<S>>,
     columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>,
   ) {
     this.#db = db;
     this.#name = name;
     this.#schema = schema;
-    this.#id = id;
+    this.#condition = condition;
     this.#columnNames = columnNames;
     this.#keys = columnNames.map(
-      (columnName) => [this.#name, this.#id, columnName],
+      (columnName) => [this.#name, this.#condition.id, columnName],
     );
   }
 
@@ -85,12 +86,12 @@ export class Row<
 
     // no columns, row doesn't exist
     if (!Object.entries(row).length) {
-      return { id: this.#id, value: null, versionstamps } as NoResult<
+      return { id: this.#condition.id, value: null, versionstamps } as NoResult<
         z.infer<S>
       >;
     }
 
-    return { id: this.#id, value: row, versionstamps };
+    return { id: this.#condition.id, value: row, versionstamps };
   }
 
   /**
@@ -115,7 +116,7 @@ export class Row<
 
     if (!columnCount) {
       throw new Error(
-        `A row with id '${this.#id}' doesn't exist in table '${this.#name}'.`,
+        `A row with id '${this.#condition.id}' doesn't exist in table '${this.#name}'.`,
       );
     }
 
@@ -126,7 +127,7 @@ export class Row<
     }
 
     for (const [columnName, value] of Object.entries(row)) {
-      const key = [this.#name, this.#id, columnName];
+      const key = [this.#name, this.#condition.id, columnName];
       op = op.set(key, value);
     }
 
