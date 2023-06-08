@@ -31,38 +31,27 @@ const options = {
 const db = await openDatabase(options);
 
 const res = await db
-  .from("countries")
-  .insert({ name: "USA", color: "blue" });
+  .insert("countries", { name: "USA", color: "blue" });
 
 if (res.ok) {
   const id = res.id;
 
   const a = await db
-    .from("countries")
-    .where({ id })
-    .read();
+    .read("countries", { id });
   console.log(id, a);
 
   await db
-    .from("countries")
-    .where({ id })
-    .update({ color: "red" });
+    .update("countries", { id }, { color: "red" });
 
   const b = await db
-    .from("countries")
-    .where({ id })
-    .read();
+    .read("countries", { id });
   console.log(id, b);
 
   await db
-    .from("countries")
-    .where({ id })
-    .delete();
+    .delete("countries", { id })
 
   const c = await db
-    .from("countries")
-    .where({ id })
-    .read();
+    .read("countries", { id });
   console.log(id, c);
 }
 
