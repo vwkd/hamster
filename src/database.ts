@@ -35,62 +35,107 @@ interface ReadCondition {
   id: bigint;
 }
 
-// note: here can only create builder, since `columnNames` is available only inside class at runtime
-// todo: get schema of `WriteCondition`, `z.shapeof<..>`?, opposite of `z.infer<..>`, also for `columnsSchemaBuilder`
-function writeConditionSchemaBuilder(columnNames: string[]) {
+/**
+ * Build schema for writeCondition argument from table schema
+ *
+ * note: can only create builder, since `schema` is available only at runtime
+ * note: can't infer type with `z.infer<writeConditionSchema>` since `writeConditionSchema` is only known at runtime, needs to define `WriteCondition` type manually
+ * @param schema the table schema
+ * @returns new schema with string or null optional columns
+ */
+function writeConditionSchemaBuilder<
+  O extends Options,
+  K extends Key<O>,
+  S extends Schema<O, K>,
+>(schema: S) {
+  const val = z.union([z.string(), z.null()]).optional();
+
+  const schemaNew = Object.fromEntries(
+    Object.keys(schema).map((columnName) => [columnName, val]),
+  ) as { [K in StringKeyOf<S>]: typeof val };
+
+  const versionstampSchema = z.object(schemaNew).strict().optional();
+
   return z.object({
     "id": idSchema,
-    "versionstamps": z.object(
-      Object.fromEntries(
-        columnNames.map((
-          columnName,
-        ) => [columnName, z.union([z.string(), z.null()]).optional()]),
-      ),
-    ).strict().optional(),
+    "versionstamps": versionstampSchema,
   }, {
     required_error: "condition is required",
     invalid_type_error: "condition must be an object",
   }).strict();
 }
 
-// note: can't infer type with `z.infer<writeConditionSchema>` since `writeConditionSchema` only known at runtime
-interface WriteCondition<T> extends ReadCondition {
+interface WriteCondition<
+  O extends Options,
+  K extends Key<O>,
+  S extends Schema<O, K>,
+> extends ReadCondition {
   /**
    * optional versionstamps for atomic transaction check in mutation methods
    */
-  versionstamps?: Partial<Versionstamps<T>>;
+  versionstamps?: Partial<Versionstamps<O, K, S>>;
 }
 
-type RowResult<T> = { id: bigint; value: T; versionstamps: Versionstamps<T> };
+type Versionstamps<
+  O extends Options,
+  K extends Key<O>,
+  S extends Schema<O, K>,
+> = { [K in StringKeyOf<z.infer<S>>]: string | null };
 
-type Versionstamps<T> = { [K in StringKeyOf<T>]: string | null };
-
-type RowResultMaybe<T> = RowResult<T> | NoResult<T>;
-
-type NoResult<T> = {
+type RowResult<O extends Options, K extends Key<O>, S extends Schema<O, K>> = {
   id: bigint;
-  value: null;
-  versionstamps: NoVersionstamps<T>;
+  value: z.infer<S>;
+  versionstamps: Versionstamps<O, K, S>;
 };
 
-type NoVersionstamps<T> = { [K in StringKeyOf<T>]: null };
+type RowResultMaybe<
+  O extends Options,
+  K extends Key<O>,
+  S extends Schema<O, K>,
+> = RowResult<O, K, S> | NoResult<O, K, S>;
 
-// note: here can only create builder, since `columnNames` is available only inside class at runtime
-function columnsSchemaBuilder(columnNames: string[]) {
-  return z.object(
-    Object.fromEntries(
-      columnNames.map((
-        columnName,
-      ) => [columnName, z.unknown().optional()]),
-    ),
-    {
-      required_error: "columns is required",
-      invalid_type_error: "columns must be an object",
-    },
-  ).strict().refine(isNonempty, {
+type NoResult<O extends Options, K extends Key<O>, S extends Schema<O, K>> = {
+  id: bigint;
+  value: null;
+  versionstamps: NoVersionstamps<O, K, S>;
+};
+
+type NoVersionstamps<
+  O extends Options,
+  K extends Key<O>,
+  S extends Schema<O, K>,
+> = { [K in StringKeyOf<z.infer<S>>]: null };
+
+/**
+ * Build schema for columns argument from table schema
+ *
+ * note: can only create builder, since `schema` is available only at runtime
+ * note: can't infer type with `z.infer<columnsSchema>` since `columnsSchema` is only known at runtime, needs to define `Columns` type manually
+ * @param schema the table schema
+ * @returns new schema with unknown optional columns
+ */
+function columnsSchemaBuilder<
+  O extends Options,
+  K extends Key<O>,
+  S extends Schema<O, K>,
+>(schema: S) {
+  const val = z.unknown().optional();
+
+  const schemaNew = Object.fromEntries(
+    Object.keys(schema).map((columnName) => [columnName, val]),
+  ) as { [K in StringKeyOf<S>]: typeof val };
+
+  return z.object(schemaNew, {
+    required_error: "columns is required",
+    invalid_type_error: "columns must be an object",
+  }).strict().refine(isNonempty, {
     message: "columns must have at least one column",
   }).optional();
 }
+
+type Columns<O extends Options, K extends Key<O>, S extends Schema<O, K>> = {
+  [K in StringKeyOf<z.infer<S>>]?: unknown;
+};
 
 type Key<O extends Options> = StringKeyOf<O["tables"]>;
 
@@ -105,10 +150,6 @@ type ColumnKeys<O extends Options, K extends Key<O>, S extends Schema<O, K>> = [
   StringKeyOf<z.infer<S>>,
   bigint,
 ][];
-
-type Columns<O extends Options, K extends Key<O>, S extends Schema<O, K>> = {
-  [K in StringKeyOf<z.infer<S>>]: unknown;
-};
 
 /**
  * array of column names
@@ -166,17 +207,17 @@ export class Database<O extends Options> {
       throw createUserError(err);
     }
 
-    const tableSchema = this.#options.tables[name];
+    // note: somehow needs this narrowing type cast otherwhise errors
+    const tableSchema = this.#options.tables[name] as O["tables"][K];
 
     if (!tableSchema) {
       throw new Error(`A table with name '${name}' doesn't exist.`);
     }
 
-    // note: somehow needs this narrowing type cast otherwhise errors
     const schema = z.object(tableSchema, {
       required_error: "row is required",
       invalid_type_error: "row must be an object",
-    }) as Schema<O, K>;
+    });
 
     return schema;
   }
@@ -189,7 +230,7 @@ export class Database<O extends Options> {
   #getColumnNames<K extends Key<O>, S extends Schema<O, K>>(
     schema: S,
   ): ColumnNames<O, K, S> {
-    // todo: somehow types don't propagate here, JavaScript works though
+    // todo: types don't propagate here, also everywhere downstream
     const columnNames = schema.keyof().options;
 
     return columnNames;
@@ -281,11 +322,11 @@ export class Database<O extends Options> {
    * @param writeCondition condition of row for writing
    */
   #verifyRowConditionWrite<K extends Key<O>, S extends Schema<O, K>>(
-    columnNames: ColumnNames<O, K, S>,
-    writeCondition: WriteCondition<z.infer<S>>,
+    schema: S,
+    writeCondition: WriteCondition<O, K, S>,
   ): void {
     // note: here `z.infer<writeConditionSchema>` equals `WriteCondition<z.infer<S>>`
-    const writeConditionSchema = writeConditionSchemaBuilder(columnNames);
+    const writeConditionSchema = writeConditionSchemaBuilder(schema);
 
     try {
       writeConditionSchema.parse(writeCondition);
@@ -336,15 +377,15 @@ export class Database<O extends Options> {
   async read<K extends Key<O>, S extends Schema<O, K>>(
     name: K,
     condition: ReadCondition,
-    columns?: Partial<Columns<O, K, S>>,
+    columns?: Columns<O, K, S>,
     options?: { consistency?: Deno.KvConsistencyLevel },
-  ): Promise<RowResultMaybe<z.infer<S>>> {
+  ): Promise<RowResultMaybe<O, K, S>> {
     const schema = this.#getTableSchema(name);
     const columnNames = this.#getColumnNames(schema);
     this.#verifyRowConditionRead(condition);
     const keysAll = this.#getColumnKeys(name, condition.id, columnNames);
 
-    const columnsSchema = columnsSchemaBuilder(columnNames);
+    const columnsSchema = columnsSchemaBuilder(schema);
 
     try {
       columnsSchema.parse(columns);
@@ -363,7 +404,7 @@ export class Database<O extends Options> {
 
     const row = {} as z.infer<S>;
     // todo: remove type assertion after fixed type of `schema.keyof().options;`
-    const versionstamps = {} as Versionstamps<z.infer<S>>;
+    const versionstamps = {} as Versionstamps<O, K, S>;
 
     for (const entry of entries) {
       // todo: remove type assertions after adds types above
@@ -385,7 +426,7 @@ export class Database<O extends Options> {
       return {
         id: condition.id,
         value: null,
-        versionstamps: versionstamps as NoVersionstamps<z.infer<S>>,
+        versionstamps: versionstamps as NoVersionstamps<O, K, S>,
       };
     }
 
@@ -402,7 +443,7 @@ export class Database<O extends Options> {
    */
   async update<K extends Key<O>, S extends Schema<O, K>>(
     name: K,
-    condition: WriteCondition<z.infer<S>>,
+    condition: WriteCondition<O, K, S>,
     row: PartialStringKey<z.infer<S>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
     const schema = this.#getTableSchema(name);
@@ -468,7 +509,7 @@ export class Database<O extends Options> {
    */
   async delete<K extends Key<O>, S extends Schema<O, K>>(
     name: K,
-    condition: WriteCondition<z.infer<S>>,
+    condition: WriteCondition<O, K, S>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
     const schema = this.#getTableSchema(name);
     const columnNames = this.#getColumnNames(schema);
