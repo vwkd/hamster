@@ -2,7 +2,16 @@ import { fromZodError, ValidationError, z, ZodParsedType } from "../deps.ts";
 import type { ZodError } from "../deps.ts";
 
 // note: somehow needs this otherwise errors all over the place
-export type StringKeyOf<T extends object> = Extract<keyof T, string>;
+export type StringKeyOf<T> = Extract<keyof T, string>;
+
+export type PartialStringKey<T> = {
+  [P in StringKeyOf<T>]?: T[P];
+};
+
+// patch Object.entries from https://stackoverflow.com/a/60142095/2607891
+export type Entries<T> = {
+  [K in StringKeyOf<T>]: [K, T[K]];
+}[StringKeyOf<T>][];
 
 /**
  * Check if object is not empty

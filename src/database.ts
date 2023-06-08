@@ -8,7 +8,7 @@ import {
   ownErrorMap,
   userErrorMap,
 } from "./utils.ts";
-import type { StringKeyOf } from "./utils.ts";
+import type { Entries, PartialStringKey, StringKeyOf } from "./utils.ts";
 
 z.setErrorMap(ownErrorMap);
 
@@ -63,7 +63,7 @@ interface WriteCondition<T> extends ReadCondition {
 
 type RowResult<T> = { id: bigint; value: T; versionstamps: Versionstamps<T> };
 
-type Versionstamps<T> = { [K in keyof T]: string | null };
+type Versionstamps<T> = { [K in StringKeyOf<T>]: string | null };
 
 type RowResultMaybe<T> = RowResult<T> | NoResult<T>;
 
@@ -73,7 +73,7 @@ type NoResult<T> = {
   versionstamps: NoVersionstamps<T>;
 };
 
-type NoVersionstamps<T> = { [K in keyof T]: null };
+type NoVersionstamps<T> = { [K in StringKeyOf<T>]: null };
 
 // note: here can only create builder, since `columnNames` is available only inside class at runtime
 function columnsSchemaBuilder(columnNames: string[]) {
@@ -107,7 +107,7 @@ type ColumnKeys<O extends Options, K extends Key<O>, S extends Schema<O, K>> = [
 ][];
 
 type Columns<O extends Options, K extends Key<O>, S extends Schema<O, K>> = {
-  [K in keyof z.infer<S>]: unknown;
+  [K in StringKeyOf<z.infer<S>>]: unknown;
 };
 
 /**
@@ -118,7 +118,7 @@ type ColumnNames<
   O extends Options,
   K extends Key<O>,
   S extends Schema<O, K>,
-> = enumUtil.UnionToTupleString<keyof z.infer<S>>;
+> = enumUtil.UnionToTupleString<StringKeyOf<z.infer<S>>>;
 
 export class Database<O extends Options> {
   /**
@@ -259,7 +259,9 @@ export class Database<O extends Options> {
     let op = this.#db.atomic()
       .check(lastRow);
 
-    for (const [columnName, value] of Object.entries(row)) {
+    for (
+      const [columnName, value] of Object.entries(row) as Entries<typeof row>
+    ) {
       const key = [name, id, columnName];
       op = op.set(key, value);
     }
@@ -365,7 +367,7 @@ export class Database<O extends Options> {
 
     for (const entry of entries) {
       // todo: remove type assertions after adds types above
-      const key = entry.key.at(-1)! as keyof z.infer<S>;
+      const key = entry.key.at(-1)! as StringKeyOf<z.infer<S>>;
       if (entry.versionstamp) {
         // column is non-null, add to row
         // todo: remove type assertions after adds types above
@@ -401,7 +403,7 @@ export class Database<O extends Options> {
   async update<K extends Key<O>, S extends Schema<O, K>>(
     name: K,
     condition: WriteCondition<z.infer<S>>,
-    row: Partial<z.infer<S>>,
+    row: PartialStringKey<z.infer<S>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
     const schema = this.#getTableSchema(name);
     const columnNames = this.#getColumnNames(schema);
@@ -431,7 +433,11 @@ export class Database<O extends Options> {
 
     const versionstamps = condition.versionstamps;
     if (versionstamps) {
-      for (const [columnName, versionstamp] of Object.entries(versionstamps)) {
+      for (
+        const [columnName, versionstamp] of Object.entries(
+          versionstamps,
+        ) as Entries<typeof versionstamps>
+      ) {
         if (versionstamp !== undefined) {
           const key = [name, condition.id, columnName];
           op = op.check({ key, versionstamp });
@@ -443,7 +449,9 @@ export class Database<O extends Options> {
       op = op.check(entry);
     }
 
-    for (const [columnName, value] of Object.entries(row)) {
+    for (
+      const [columnName, value] of Object.entries(row) as Entries<typeof row>
+    ) {
       const key = [name, condition.id, columnName];
       op = op.set(key, value);
     }
@@ -471,7 +479,11 @@ export class Database<O extends Options> {
 
     const versionstamps = condition.versionstamps;
     if (versionstamps) {
-      for (const [columnName, versionstamp] of Object.entries(versionstamps)) {
+      for (
+        const [columnName, versionstamp] of Object.entries(
+          versionstamps,
+        ) as Entries<typeof versionstamps>
+      ) {
         if (versionstamp !== undefined) {
           const key = [name, condition.id, columnName];
           op = op.check({ key, versionstamp });
