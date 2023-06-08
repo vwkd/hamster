@@ -96,6 +96,8 @@ export class Row<
 
   /**
    * Update row in table
+   *
+   * Checks the versionstamps passed in `where`
    * @param row data to update row with
    */
   async update(
@@ -122,6 +124,16 @@ export class Row<
 
     let op = this.#db.atomic();
 
+    const versionstamps = this.#condition.versionstamps;
+    if (versionstamps) {
+      for (const [columnName, versionstamp] of Object.entries(versionstamps)) {
+        if (versionstamp !== undefined) {
+          const key = [this.#name, this.#condition.id, columnName];
+          op = op.check({ key, versionstamp });
+        }
+      }
+    }
+
     for (const entry of entries) {
       op = op.check(entry);
     }
@@ -136,9 +148,21 @@ export class Row<
 
   /**
    * Delete row from table
+   *
+   * Checks the versionstamps passed in `where`
    */
   async delete(): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
     let op = this.#db.atomic();
+
+    const versionstamps = this.#condition.versionstamps;
+    if (versionstamps) {
+      for (const [columnName, versionstamp] of Object.entries(versionstamps)) {
+        if (versionstamp !== undefined) {
+          const key = [this.#name, this.#condition.id, columnName];
+          op = op.check({ key, versionstamp });
+        }
+      }
+    }
 
     for (const key of this.#keys) {
       op = op.delete(key);
