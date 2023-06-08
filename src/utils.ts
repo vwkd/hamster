@@ -23,9 +23,32 @@ export function createUserError(zodError: ZodError): ValidationError {
 }
 
 /**
- * Custom error map to add more descriptive errors to user-supplied database schema
+ * Custom error map for own schemas to reduce repetition
  */
-export const customErrorMap: z.ZodErrorMap = (iss, ctx) => {
+export const ownErrorMap: z.ZodErrorMap = (iss, ctx) => {
+  const fieldName = iss.path.at(-1);
+
+  // todo: can iss.path be empty?
+  if (iss.code !== z.ZodIssueCode.invalid_type || !iss.path.length) {
+    return { message: ctx.defaultError };
+  }
+
+  if (iss.received === ZodParsedType.undefined) {
+    return { message: `'${fieldName}' is required` };
+  }
+
+  return {
+    message: `'${fieldName}' must be ${
+      getArticle(iss.expected)
+    }${iss.expected}`,
+  };
+};
+
+/**
+ * Custom error map for user-supplied database schema
+ * to patch on descriptive errors afterwards
+ */
+export const userErrorMap: z.ZodErrorMap = (iss, ctx) => {
   const columnName = iss.path[0];
   const fieldPath = iss.path.slice(1);
 

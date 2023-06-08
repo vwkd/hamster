@@ -3,8 +3,10 @@ import type { enumUtil } from "../deps.ts";
 import type { Options } from "./main.ts";
 import { Row } from "./row.ts";
 import type { StringKeyOf } from "./utils.ts";
-import { customErrorMap } from "./utils.ts";
+import { ownErrorMap, userErrorMap } from "./utils.ts";
 import { createUserError } from "./utils.ts";
+
+z.setErrorMap(ownErrorMap);
 
 interface CommitResult extends Deno.KvCommitResult {
   id: bigint;
@@ -12,12 +14,8 @@ interface CommitResult extends Deno.KvCommitResult {
 
 type CommitError = Deno.KvCommitError;
 
-const idSchema = z.bigint({
-  required_error: "ID is required",
-  invalid_type_error: "ID must be a bigint",
-}).positive({ message: "ID must be positive" });
+const idSchema = z.bigint().positive({ message: "'id' must be positive" });
 
-// todo: better error messages using custom error map global
 // note: here can only create builder, since `columnNames` is available only inside class at runtime
 function conditionSchemaBuilder(columnNames: string[]) {
   return z.object({
@@ -29,6 +27,9 @@ function conditionSchemaBuilder(columnNames: string[]) {
         ) => [columnName, z.union([z.string(), z.null()]).optional()]),
       ),
     ).strict().optional(),
+  }, {
+    required_error: "condition is required",
+    invalid_type_error: "condition must be an object",
   }).strict();
 }
 
@@ -126,7 +127,7 @@ export class Table<
    */
   async insert(row: z.infer<S>): Promise<CommitResult | CommitError> {
     try {
-      this.#schema.strict().parse(row, { errorMap: customErrorMap });
+      this.#schema.strict().parse(row, { errorMap: userErrorMap });
     } catch (err) {
       throw createUserError(err);
     }

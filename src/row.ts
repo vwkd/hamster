@@ -3,7 +3,7 @@ import type { enumUtil } from "../deps.ts";
 import type { Options } from "./main.ts";
 import type { Condition } from "./table.ts";
 import type { StringKeyOf } from "./utils.ts";
-import { createUserError, customErrorMap, isNonempty } from "./utils.ts";
+import { createUserError, isNonempty, userErrorMap } from "./utils.ts";
 
 type RowResult<T> = { id: bigint; value: T; versionstamps: Versionstamps<T> };
 
@@ -106,7 +106,7 @@ export class Row<
     try {
       this.#schema.partial().refine(isNonempty, {
         message: "row must update at least one column",
-      }).parse(row, { errorMap: customErrorMap });
+      }).parse(row, { errorMap: userErrorMap });
     } catch (err) {
       throw createUserError(err);
     }
