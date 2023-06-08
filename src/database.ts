@@ -92,29 +92,29 @@ export class Database<O extends Options> {
   /**
    * the table name
    */
-  // note: definite assignment assertion since assigned before use in `#from`
+  // note: definite assignment assertion since assigned before use in `#tableInit`
   #name!: Key<O>;
   /**
    * the table schema
    */
-  // note: definite assignment assertion since assigned before use in `#from`
+  // note: definite assignment assertion since assigned before use in `#tableInit`
   #schema!: Schema<O, Key<O>>;
   /**
    * array of column names
    */
   // todo: type correct?
-  // note: definite assignment assertion since assigned before use in `#from`
+  // note: definite assignment assertion since assigned before use in `#tableInit`
   #columnNames!: enumUtil.UnionToTupleString<keyof z.infer<Schema<O, Key<O>>>>;
   /**
    * condition of row
    */
-  // note: definite assignment assertion since assigned before use in `#where`
+  // note: definite assignment assertion since assigned before use in `#rowInit`
   #condition!: Condition<z.infer<Schema<O, Key<O>>>>;
   /**
    * array of column keys
    */
   // todo: type better?
-  // note: definite assignment assertion since assigned before use in `#where`
+  // note: definite assignment assertion since assigned before use in `#rowInit`
   #keys!: string[][];
 
   /**
@@ -145,7 +145,7 @@ export class Database<O extends Options> {
    * Prepare interface to table
    * @param name the table name
    */
-  #from(name: Key<O>): void {
+  #tableInit(name: Key<O>): void {
     try {
       tableNameSchema.parse(name);
     } catch (err) {
@@ -222,7 +222,7 @@ export class Database<O extends Options> {
     name: Key<O>,
     row: z.infer<Schema<O, Key<O>>>,
   ): Promise<CommitResult | CommitError> {
-    this.#from(name);
+    this.#tableInit(name);
 
     try {
       this.#schema.strict().parse(row, { errorMap: userErrorMap });
@@ -254,8 +254,8 @@ export class Database<O extends Options> {
    * @param name the table name
    * @param condition condition of row
    */
-  #where(name: Key<O>, condition: Condition<z.infer<Schema<O, Key<O>>>>): void {
-    this.#from(name);
+  #rowInit(name: Key<O>, condition: Condition<z.infer<Schema<O, Key<O>>>>): void {
+    this.#tableInit(name);
 
     // note: here `z.infer<conditionSchema>` equals `Condition<z.infer<Schema<O, Key<O>>>>`
     const conditionSchema = conditionSchemaBuilder(this.#columnNames);
@@ -288,7 +288,7 @@ export class Database<O extends Options> {
     ),
     options?: { consistency?: Deno.KvConsistencyLevel },
   ): Promise<RowResultMaybe<z.infer<Schema<O, Key<O>>>>> {
-    this.#where(name, condition);
+    this.#rowInit(name, condition);
 
     const columnsSchema = columnsSchemaBuilder(this.#columnNames);
 
@@ -347,7 +347,7 @@ export class Database<O extends Options> {
     condition: Condition<z.infer<Schema<O, Key<O>>>>,
     row: Partial<z.infer<Schema<O, Key<O>>>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
-    this.#where(name, condition);
+    this.#rowInit(name, condition);
 
     try {
       this.#schema.partial().refine(isNonempty, {
@@ -403,7 +403,7 @@ export class Database<O extends Options> {
     name: Key<O>,
     condition: Condition<z.infer<Schema<O, Key<O>>>>,
   ): Promise<Deno.KvCommitResult | Deno.KvCommitError> {
-    this.#where(name, condition);
+    this.#rowInit(name, condition);
 
     let op = this.#db.atomic();
 
