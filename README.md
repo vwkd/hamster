@@ -74,5 +74,4 @@ db.close();
 ## TODO
 
 - read multiple rows at once based on condition, allow multiple IDs in `where`, but only makes sense for get?!
-- option to read only some columns instead of all
 - support secondary indeces

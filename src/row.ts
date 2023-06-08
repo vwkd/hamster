@@ -19,6 +19,19 @@ type NoResult<T> = {
 
 type NoVersionstamps<T> = { [K in keyof T]: null };
 
+// note: here can only create builder, since `columnNames` is available only inside class at runtime
+function columnsSchemaBuilder(columnNames: string[]) {
+  return z.object(
+    Object.fromEntries(
+      columnNames.map((
+        columnName,
+      ) => [columnName, z.unknown().optional()]),
+    ),
+  ).strict().refine(isNonempty, {
+    message: "columns must have at least one column",
+  }).optional();
+}
+
 export class Row<
   O extends Options,
   K extends StringKeyOf<O["tables"]>,
@@ -28,7 +41,7 @@ export class Row<
   #name: K;
   #schema: S;
   #condition: Condition<z.infer<S>>;
-  #columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
+  columnNames: enumUtil.UnionToTupleString<keyof z.infer<S>>;
   // todo: type better?
   #keys: string[][];
 
@@ -49,7 +62,7 @@ export class Row<
     this.#name = name;
     this.#schema = schema;
     this.#condition = condition;
-    this.#columnNames = columnNames;
+    this.columnNames = columnNames;
     this.#keys = columnNames.map(
       (columnName) => [this.#name, this.#condition.id, columnName],
     );
@@ -57,13 +70,30 @@ export class Row<
 
   /**
    * Read row from table
+   * @param columns columns to select, default is all
+   * @param options optional options to Deno KV
    * @returns `RowResult` if row exists, `NoResult` otherwise
    */
   async read(
-    options?: Deno.KvListOptions,
+    columns = Object.fromEntries(
+      this.columnNames.map((columnName) => [columnName, true]),
+    ),
+    options?: { consistency?: Deno.KvConsistencyLevel },
   ): Promise<RowResultMaybe<z.infer<S>>> {
+    const columnsSchema = columnsSchemaBuilder(this.columnNames);
+
+    try {
+      columnsSchema.parse(columns);
+    } catch (err) {
+      throw createUserError(err);
+    }
+
+    const keys = Object.keys(columns).map(
+      (column) => [this.#name, this.#condition.id, column],
+    );
+
     // todo: type `getMany<..>` with array of property values of `z.infer<S>`, also in `update`
-    const entries = await this.#db.getMany(this.#keys, options);
+    const entries = await this.#db.getMany(keys, options);
 
     const row = {} as z.infer<S>;
     // todo: remove type assertion after fixed type of `schema.keyof().options;` in `table.ts`
