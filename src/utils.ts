@@ -9,8 +9,8 @@ export type StringKeyOf<T extends object> = Extract<keyof T, string>;
  * @param obj object
  * @returns truthy if object has at least one field, falsy otherwise
  */
-export function isNonempty(obj: object) {
-  return Object.keys(obj).length;
+export function isNonempty(obj: { [x in string]: unknown } | undefined) {
+  return obj && Object.keys(obj).length;
 }
 
 /**
